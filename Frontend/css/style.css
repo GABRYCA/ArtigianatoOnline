@@ -11,6 +11,14 @@ input:focus, textarea:focus, select:focus {
     background-color: #f5f5f5;
 }
 
+.bg-warning {
+    background-color: #b68907 !important;
+}
+
+.bg-info {
+    background-color: #095acf !important;
+}
+
 .text-description-hero {
     max-width: 700px;
     word-wrap: break-word;
