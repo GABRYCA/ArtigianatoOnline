@@ -4,7 +4,7 @@
 - HTML
 - CSS
 - JavaScript
-
+ 
 ## API Endpoints
 
 ### Autenticazione
