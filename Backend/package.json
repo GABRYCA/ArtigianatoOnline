@@ -1,0 +1,38 @@
+{
+  "name": "backend-artigianatoonline",
+  "version": "0.0.1",
+  "description": "Backend di Artigianato Online",
+  "keywords": [
+    "backend",
+    "expressjs"
+  ],
+  "license": "MIT",
+  "author": "AnonymousGCA RiccardoCoder",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "seed": "node scripts/seed.js",
+    "setup-db": "node scripts/setupDb.js",
+    "clear": "node scripts/clear.js",
+    "test": "mocha tests/**/*.test.js --timeout 10000 --exit"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.14.1"
+  },
+  "devDependencies": {
+    "chai": "^5.2.0",
+    "chai-http": "^5.1.1",
+    "mocha": "^11.1.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.1.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  }
+}
