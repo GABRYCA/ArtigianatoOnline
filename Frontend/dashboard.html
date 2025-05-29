@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Artigianato Online</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="images/favicon.png">
+
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link type="text/css" rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
+            crossorigin="anonymous"></script>
+    <script src="js/headerfooterloader.js"></script>
+    <script>
+        const urlBaseApi = "";
+        let tokenSessione = localStorage.getItem('sessionToken');
+        const datiUtenteString = localStorage.getItem('userData');
+        let datiUtente = null;
+        let datiCategorie = [];
+        let modaleProdotto = null;
+        let modaleInfoSpedizione = null;
+        let modaleCategoria = null;
+        $(document).ready(function () {
+            if (!tokenSessione || !datiUtenteString) {
+                logout();
+                return;
+            }
+
+            try {
+                datiUtente = JSON.parse(datiUtenteString);
+                if (!datiUtente || typeof datiUtente !== 'object' || !datiUtente.user_id || (datiUtente.role !== 'artigiano' && datiUtente.role !== 'admin')) {
+                    console.warn("Dati utente non validi o utente non artigiano/admin.");
+                    logout();
+                    return;
+                }
+            } catch (e) {
+                console.error("Errore parsing userData", e);
+                logout();
+                return;
+            }
+
+            const elementoModaleProdotto = document.getElementById('productModal');
+            if (elementoModaleProdotto) {
+                modaleProdotto = new bootstrap.Modal(elementoModaleProdotto);
+            } else {
+                console.error("Elemento modale #productModal non trovato!");
+            }
+
+            const elementoModaleSpedizione = document.getElementById('shippingInfoModal');
+            if (elementoModaleSpedizione) {
+                modaleInfoSpedizione = new bootstrap.Modal(elementoModaleSpedizione);
+            } else {
+                console.error("Elemento modale #shippingInfoModal non trovato!");
+            }
+
+            const elementoModaleCategoria = document.getElementById('categoryModal');
+            if (elementoModaleCategoria) {
+                modaleCategoria = new bootstrap.Modal(elementoModaleCategoria);
+            } else {
+                console.error("Elemento modale #categoryModal non trovato!");
+            }
+            caricaCategorie()
+                .then(() => {
+                    caricaSommariCard();
+                    caricaOrdiniRecenti();
+                    caricaProdotti();
+
+                    if (datiUtente.role === 'admin' || datiUtente.role === 'artigiano') {
+                        $('#addCategoryBtn').show();
+                        $('#categories-tab-item').show();
+                    }
+                })
+                .catch(errore => {
+                    console.error("Errore nel caricamento iniziale:", errore);
+                });
+
+            aggiornaBadgeCarrelloConRitardo();
+
+            $('#addProductBtn').on('click', function () {
+                apriModaleProdotto();
+            });
+
+            $('#addCategoryBtn').on('click', function () {
+                apriModaleCategoria();
+            });
+
+            $('#products-table').on('click', '.edit-btn', function () {
+                const idProdotto = $(this).data('product-id');
+                apriModaleProdotto(idProdotto);
+            });
+
+            $('#products-table').on('click', '.delete-btn', function () {
+                const idProdotto = $(this).data('product-id');
+                cancellaProdotto(idProdotto);
+            });
+
+            $('#categories-table').on('click', '.edit-category-btn', function () {
+                const idCategoria = $(this).data('category-id');
+                apriModaleCategoria(idCategoria);
+            });
+
+            $('#categories-table').on('click', '.delete-category-btn', function () {
+                const idCategoria = $(this).data('category-id');
+                cancellaCategoria(idCategoria);
+            });
+
+            $('#productForm').on('submit', function (e) {
+                e.preventDefault();
+                salvaProdotto();
+            });
+
+            $('#categoryForm').on('submit', function (e) {
+                e.preventDefault();
+                salvaCategoria();
+            });
+            $(elementoModaleProdotto).on('hidden.bs.modal', function () {
+                $('#productForm')[0].reset();
+                $('#product-modal-feedback').empty().removeClass('alert-danger alert-success');
+                $('#productId').val('');
+                $('#productModalLabel').text('Aggiungi Nuovo Prodotto');
+                $('#saveProductBtn').text('Salva Prodotto');
+                $('#saveProductBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+            });
+
+            $(elementoModaleCategoria).on('hidden.bs.modal', function () {
+                $('#categoryForm')[0].reset();
+                $('#category-modal-feedback').empty().removeClass('alert-danger alert-success');
+                $('#categoryId').val('');
+                $('#categoryModalLabel').text('Aggiungi Nuova Categoria');
+                $('#saveCategoryBtn').text('Salva Categoria');
+                $('#saveCategoryBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+            });
+
+            $('#all-orders-table').on('click', '.update-status-btn', async function () {
+                const idOrdine = $(this).data('order-id');
+                const statoAggiornato = $(this).data('new-status');
+                const pulsante = $(this);
+                const pulsanteDropdown = pulsante.closest('.dropdown').find('.status-dropdown-toggle');
+
+                if (statoAggiornato === 'shipped') {
+                    $('#shippingOrderId').val(idOrdine);
+                    $('#shippingOrderIdDisplay').text(idOrdine);
+                    $('#shippingTrackingNumber').val('');
+                    $('#shippingNotes').val('');
+                    $('#shipping-modal-feedback').empty().removeClass('alert-danger alert-success');
+                    $('#saveShippingInfoBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+                    if (modaleInfoSpedizione) {
+                        modaleInfoSpedizione.show();
+                    } else {
+                        console.error("Istanza modale spedizione non disponibile.");
+                        alert("Errore: Impossibile aprire la finestra per le informazioni di spedizione.");
+                    }
+                } else {
+                    const htmlOriginale = pulsante.html();
+                    pulsanteDropdown.prop('disabled', true);
+                    pulsante.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+                    $('#all-orders-feedback').empty();
+
+                    try {
+                        await fetchAutenticato(`${urlBaseApi}/api/orders/${idOrdine}/status`, {
+                            method: 'PUT',
+                            body: {status: statoAggiornato}
+                        });
+
+                        $(`#status-badge-${idOrdine}`).text(traduciStatoOrdine(statoAggiornato)).removeClass().addClass(`badge bg-${getStatoOrdineBadge(statoAggiornato)}`);
+                        const htmlNuoveAzioni = generatoreAzioniOrdini(idOrdine, statoAggiornato);
+                        const htmlPulsanteVediDettagli = azioniHtmlNoDropdown(idOrdine);
+                        $(`#order-row-${idOrdine} td:last-child`).html(`<div class="d-flex gap-1">${htmlPulsanteVediDettagli}${htmlNuoveAzioni}</div>`);
+
+                        const nuovoElementoDropdown = document.getElementById(`dropdownMenuButton-${idOrdine}`);
+                        if (nuovoElementoDropdown) {
+                            new bootstrap.Dropdown(nuovoElementoDropdown);
+                        }
+
+                        mostraAlertDashboard(`Stato dell'ordine ${idOrdine} aggiornato a "${traduciStatoOrdine(statoAggiornato)}".`, 'success');
+                        caricaOrdiniRecenti();
+
+                    } catch (errore) {
+                        console.error(`Errore aggiornamento stato ordine ${idOrdine} a ${statoAggiornato}:`, errore);
+                        mostraAlertDashboard(`Errore aggiornamento ordine ${idOrdine}: ${errore.message}`, 'danger');
+                    } finally {
+                        pulsante.prop('disabled', false).html(htmlOriginale);
+                        pulsanteDropdown.prop('disabled', false);
+                    }
+                }
+            });
+            $('#shippingInfoForm').on('submit', async function (e) {
+                e.preventDefault();
+                const pulsanteSalva = $('#saveShippingInfoBtn');
+                const spinner = pulsanteSalva.find('.spinner-border');
+                const containerFeedback = $('#shipping-modal-feedback');
+                containerFeedback.empty().removeClass('alert-danger alert-success');
+                pulsanteSalva.prop('disabled', true);
+                spinner.removeClass('d-none');
+
+                const idOrdine = $('#shippingOrderId').val();
+                const statoAggiornato = $('#shippingNewStatus').val();
+                const codiceTracking = $('#shippingTrackingNumber').val().trim();
+                const note = $('#shippingNotes').val().trim();
+
+                const corpoRichiesta = {
+                    status: statoAggiornato,
+                    tracking_number: codiceTracking || null,
+                    notes: note || null
+                };
+
+                const pulsanteDropdown = $(`#dropdownMenuButton-${idOrdine}`);
+
+                try {
+                    await fetchAutenticato(`${urlBaseApi}/api/orders/${idOrdine}/status`, {
+                        method: 'PUT',
+                        body: corpoRichiesta
+                    });
+                    $(`#status-badge-${idOrdine}`).text(traduciStatoOrdine(statoAggiornato)).removeClass().addClass(`badge bg-${getStatoOrdineBadge(statoAggiornato)}`);
+                    const htmlAzioniAggiornate = generatoreAzioniOrdini(idOrdine, statoAggiornato);
+                    const htmlPulsanteVisualizzaAzioni = azioniHtmlNoDropdown(idOrdine);
+                    $(`#order-row-${idOrdine} td:last-child`).html(`<div class="d-flex gap-1">${htmlPulsanteVisualizzaAzioni}${htmlAzioniAggiornate}</div>`);
+
+                    const nuovoElementoDropdown = document.getElementById(`dropdownMenuButton-${idOrdine}`);
+                    if (nuovoElementoDropdown) {
+                        new bootstrap.Dropdown(nuovoElementoDropdown);
+                    }
+
+                    mostraAlertDashboard(`Stato dell'ordine ${idOrdine} aggiornato a "${traduciStatoOrdine(statoAggiornato)}" con info spedizione.`, 'success');
+                    caricaOrdiniRecenti();
+
+                    if (modaleInfoSpedizione) {
+                        modaleInfoSpedizione.hide();
+                    }
+
+                } catch (errore) {
+                    console.error(`Errore aggiornamento stato ordine ${idOrdine} a ${statoAggiornato} con info spedizione:`, errore);
+                    containerFeedback.addClass('alert alert-danger').html(`Errore aggiornamento: ${errore.message}`);
+                    pulsanteSalva.prop('disabled', false);
+                    spinner.addClass('d-none');
+                } finally {
+                    if (pulsanteDropdown.length) {
+                        $(elementoModaleSpedizione).one('hidden.bs.modal', function () {
+                            pulsanteDropdown.prop('disabled', false);
+                        });
+                    }
+                }
+            });
+            $('#orders-management-tab').on('shown.bs.tab', function (e) {
+                caricaOrdiniTuttiArtigiani();
+            });
+
+            $('#categories-management-tab').on('shown.bs.tab', function (e) {
+                caricaCategorieTutte();
+            });
+        });
+
+        /**
+         * Carica l'elenco delle categorie disponibili
+         */
+        async function caricaCategorie() {
+            try {
+                const dati = await fetchAutenticato(`${urlBaseApi}/api/categories`);
+                datiCategorie = dati || [];
+                const selectCategorie = $('#productCategory');
+                selectCategorie.empty().append('<option selected disabled value="">Scegli...</option>');
+                if (datiCategorie.length > 0) {
+                    datiCategorie.forEach(categoria => {
+                        selectCategorie.append(`<option value="${categoria.category_id}">${categoria.name}</option>`);
+                    });
+                } else {
+                    selectCategorie.append('<option disabled>Nessuna categoria trovata</option>');
+                }
+            } catch (errore) {
+                console.error("Errore nel caricamento delle categorie:", errore);
+                $('#productCategory').empty().append('<option disabled>Errore caricamento categorie</option>');
+                throw errore;
+            }
+        }
+
+        /**
+         * Restituisce il nome della categoria dato l'ID
+         */
+        function getNomeCategoria(idCategoria) {
+            const categoria = datiCategorie.find(c => c.category_id === idCategoria);
+            return categoria ? categoria.name : 'N/D';
+        }
+
+        /**
+         * Apre il modale per aggiungere o modificare un prodotto
+         */
+        async function apriModaleProdotto(idProdotto = null) {
+            $('#productForm')[0].reset();
+            $('#product-modal-feedback').empty().removeClass('alert-danger alert-success');
+            $('#productId').val(idProdotto || '');
+
+            if (idProdotto) {
+                $('#productModalLabel').text('Modifica Prodotto');
+                $('#saveProductBtn').text('Salva Modifiche');
+                try {
+                    const prodotto = await fetchAutenticato(`${urlBaseApi}/api/products/${idProdotto}`);
+                    $('#productName').val(prodotto.name);
+                    $('#productDescription').val(prodotto.description);
+                    $('#productSku').val(prodotto.sku);
+                    $('#productPrice').val(prodotto.price);
+                    $('#productStock').val(prodotto.stock_quantity);
+                    $('#productCategory').val(prodotto.category_id);
+                    $('#productImageUrl').val(prodotto.image_url);
+                    $('#productIsActive').prop('checked', prodotto.is_active);
+                } catch (errore) {
+                    console.error("Errore nel caricare i dati del prodotto per la modifica:", errore);
+                    mostraAlertModale(`Impossibile caricare i dati del prodotto. ${errore.message}`, 'danger');
+                    return;
+                }
+            } else {
+                $('#productModalLabel').text('Aggiungi Nuovo Prodotto');
+                $('#saveProductBtn').text('Aggiungi Prodotto');
+                $('#productIsActive').prop('checked', true);
+            }
+
+            if (modaleProdotto) {
+                modaleProdotto.show();
+            } else {
+                console.error("Istanza della modale non disponibile.");
+            }
+        }
+
+        /**
+         * Salva un prodotto (aggiunta o modifica)
+         */
+        async function salvaProdotto() {
+            const pulsanteSalva = $('#saveProductBtn');
+            const spinner = pulsanteSalva.find('.spinner-border');
+            const containerFeedback = $('#product-modal-feedback');
+            containerFeedback.empty().removeClass('alert-danger alert-success');
+            pulsanteSalva.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            const idProdotto = $('#productId').val();
+            const inModifica = !!idProdotto;
+            const datiProdotto = {
+                name: $('#productName').val(),
+                description: $('#productDescription').val(),
+                sku: $('#productSku').val(),
+                price: parseFloat($('#productPrice').val()),
+                stock_quantity: parseInt($('#productStock').val(), 10),
+                category_id: parseInt($('#productCategory').val(), 10),
+                image_url: $('#productImageUrl').val(),
+                is_active: $('#productIsActive').is(':checked'),
+                artisan_id: datiUtente.user_id
+            };
+
+            if (!datiProdotto.name || !datiProdotto.price || isNaN(datiProdotto.price) || datiProdotto.price < 0 || !datiProdotto.category_id || isNaN(datiProdotto.stock_quantity)) {
+                mostraAlertModale('Per favore, compila tutti i campi obbligatori (Nome, Prezzo, Stock, Categoria) con valori validi.', 'danger');
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+                return;
+            }
+
+            const url = inModifica ? `${urlBaseApi}/api/products/${idProdotto}` : `${urlBaseApi}/api/products`;
+            const metodo = inModifica ? 'PUT' : 'POST';
+
+            try {
+                await fetchAutenticato(url, {method: metodo, body: datiProdotto});
+                mostraAlertModale(`Prodotto ${inModifica ? 'modificato' : 'aggiunto'} con successo!`, 'success');
+
+                caricaProdotti();
+                caricaSommariCard();
+                setTimeout(() => {
+                    if (modaleProdotto) modaleProdotto.hide();
+                }, 1500);
+
+            } catch (errore) {
+                console.error(`Errore durante il salvataggio del prodotto (${metodo} ${url}):`, errore);
+                mostraAlertModale(`Errore: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            } finally {
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+            }
+        }
+
+        /**
+         * Elimina un prodotto
+         */
+        async function cancellaProdotto(idProdotto) {
+            if (!confirm(`Sei sicuro di voler eliminare il prodotto ID ${idProdotto}? L'operazione lo renderà inattivo.`)) {
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/products/${idProdotto}`, {method: 'DELETE'});
+                caricaProdotti();
+                caricaSommariCard();
+            } catch (errore) {
+                console.error(`Errore durante l'eliminazione del prodotto ID ${idProdotto}:`, errore);
+                alert(`Errore durante l'eliminazione: ${errore.message || 'Si è verificato un problema.'}`);
+            }
+        }
+
+        /**
+         * Mostra un alert all'interno del modale prodotto
+         */
+        function mostraAlertModale(messaggio, tipo = 'danger') {
+            const containerFeedback = $('#product-modal-feedback');
+            containerFeedback.removeClass('alert-danger alert-success').addClass(`alert alert-${tipo}`).html(messaggio);
+        }
+
+        /**
+         * Carica i dati di riepilogo per le card della dashboard
+         */
+        function caricaSommariCard() {
+            fetchAutenticato(`${urlBaseApi}/api/orders`)
+                .then(dati => {
+                    let ordiniArtigiani = 0;
+                    if (dati && dati.orders) {
+                        ordiniArtigiani = dati.orders.length;
+                    }
+                    $('#total-orders').text(ordiniArtigiani);
+                })
+                .catch(() => {
+                    $('#total-orders').text('Errore');
+                });
+
+            fetchAutenticato(`${urlBaseApi}/api/products?artisanId=${datiUtente.user_id}`)
+                .then(dati => {
+                    $('#total-products').text(dati.totalItems || 0);
+                })
+                .catch(() => {
+                    $('#total-products').text('Errore');
+                });
+        }
+
+        /**
+         * Carica gli ordini recenti dell'artigiano
+         */
+        function caricaOrdiniRecenti() {
+            const corpoTabella = $('#recent-orders-table');
+            corpoTabella.empty().html('<tr><td colspan="5" class="text-center text-muted">Caricamento ordini...</td></tr>');
+
+            fetchAutenticato(`${urlBaseApi}/api/orders`)
+                .then(datiOrdini => {
+                    corpoTabella.empty();
+                    const ordini = datiOrdini.orders || [];
+                    let trovatiOrdini = false;
+
+                    if (datiUtente.role === "admin") {
+                        corpoTabella.append('<tr><td colspan="5" class="text-center text-muted">(Solo Admin) Gli ordini sono visibili nella scheda "Gestione Ordini".</td></tr>');
+                    } else {
+
+                        ordini.forEach(ordine => {
+
+                            const itemArtigiano = ordine.items;
+
+                            if (itemArtigiano && itemArtigiano.length > 0) {
+                                trovatiOrdini = true;
+                                corpoTabella.append(`
+                            <tr>
+                                <td>${ordine.order_id}</td>
+                                <td>${ordine.customer_full_name || `ID: ${ordine.customer_id}`}</td>
+                                <td>${new Date(ordine.order_date).toLocaleDateString()}</td>
+                                <td><span class="badge bg-${getStatoOrdineBadge(ordine.status)}">${traduciStatoOrdine(ordine.status)}</span></td>
+                                <td>€${parseFloat(ordine.total_amount).toFixed(2)}</td>
+                            </tr>
+                        `);
+                            }
+                        });
+
+                        if (!trovatiOrdini) {
+                            corpoTabella.append('<tr><td colspan="5" class="text-center text-muted">Nessun ordine recente trovato per i tuoi prodotti.</td></tr>');
+                        }
+                    }
+                })
+                .catch(errore => {
+                    console.error("Errore caricamento ordini:", errore);
+                    corpoTabella.html(`<tr><td colspan="5" class="text-center text-danger">Errore nel caricamento degli ordini: ${errore.message}</td></tr>`);
+                });
+        }
+
+        /**
+         * Carica i prodotti dell'artigiano
+         */
+        function caricaProdotti() {
+            const corpoTabella = $('#products-table');
+            corpoTabella.empty().html('<tr><td colspan="5" class="text-center text-muted">Caricamento prodotti...</td></tr>');
+
+            let url = '';
+            if (datiUtente.role === "artigiano") {
+                url = `${urlBaseApi}/api/products?artisanId=${datiUtente.user_id}`;
+            } else if (datiUtente.role === "admin") {
+                url = `${urlBaseApi}/api/products`;
+            } else {
+                console.error("Ruolo utente non valido per il caricamento dei prodotti.");
+                return;
+            }
+
+            fetchAutenticato(url)
+                .then(datiProdotti => {
+                    corpoTabella.empty();
+                    const prodotti = datiProdotti.products || [];
+
+                    if (prodotti.length > 0) {
+                        prodotti.forEach(prodotto => {
+                            corpoTabella.append(`
+                            <tr>
+                                <td>${prodotto.name}</td>
+                                <td>${getNomeCategoria(prodotto.category_id)}</td>
+                                <td>€${prodotto.price}</td>
+                                <td>
+                                   <span class="badge ${prodotto.stock_quantity > 0 ? (prodotto.stock_quantity < 10 ? 'bg-warning text-dark' : 'bg-success') : 'bg-danger'}">
+                                       ${prodotto.stock_quantity > 0 ? prodotto.stock_quantity + ' pz.' : 'Esaurito'}
+                                   </span>
+                                </td>
+                                <td>
+                                   <span class="badge ${prodotto.is_active ? 'bg-success' : 'bg-secondary'}">
+                                      ${prodotto.is_active ? 'Attivo' : 'Non attivo'}
+                                   </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-dark edit-btn" title="Modifica" data-product-id="${prodotto.product_id}">
+                                       <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger delete-btn" title="Elimina" data-product-id="${prodotto.product_id}">
+                                       <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `);
+                        });
+                    } else {
+                        corpoTabella.append('<tr><td colspan="6" class="text-center text-muted">Nessun prodotto trovato. <button class="btn btn-link p-0" id="addProductFromEmpty">Aggiungine uno</button></td></tr>');
+                        $('#addProductFromEmpty').on('click', () => apriModaleProdotto());
+                    }
+                })
+                .catch(errore => {
+                    console.error("Errore caricamento prodotti:", errore);
+                    corpoTabella.html(`<tr><td colspan="6" class="text-center text-danger">Errore nel caricamento dei prodotti: ${errore.message}</td></tr>`);
+                });
+        }
+
+        /**
+         * Carica tutte le categorie nella tabella di gestione
+         */        async function caricaCategorieTutte() {
+            const corpoTabella = $('#categories-table');
+            corpoTabella.empty().html('<tr><td colspan="3" class="text-center text-muted">Caricamento categorie...</td></tr>');
+
+            try {
+                const dati = await fetchAutenticato(`${urlBaseApi}/api/categories`);
+                const categorie = dati || [];
+                corpoTabella.empty();
+
+                if (categorie.length > 0) {
+                    categorie.forEach(categoria => {
+                        const azioniHtml = `
+                            <button class="btn btn-sm btn-outline-dark edit-category-btn" title="Modifica" data-category-id="${categoria.category_id}">
+                               <i class="bi bi-pencil"></i>
+                            </button>
+                            ${datiUtente.role === 'admin' ? `
+                            <button class="btn btn-sm btn-outline-danger delete-category-btn" title="Elimina" data-category-id="${categoria.category_id}">
+                               <i class="bi bi-trash"></i>
+                            </button>` : ''}
+                        `;
+                        corpoTabella.append(`
+                            <tr>
+                                <td>${categoria.name}</td>
+                                <td>${categoria.description || 'Nessuna descrizione'}</td>
+                                <td>${azioniHtml}</td>
+                            </tr>
+                        `);
+                    });
+                } else {
+                    corpoTabella.append('<tr><td colspan="3" class="text-center text-muted">Nessuna categoria trovata. <button class="btn btn-link p-0" id="addCategoryFromEmpty">Aggiungine una</button></td></tr>');
+                    $('#addCategoryFromEmpty').on('click', () => apriModaleCategoria());
+                }
+            } catch (errore) {
+                console.error("Errore caricamento categorie:", errore);
+                corpoTabella.html(`<tr><td colspan="3" class="text-center text-danger">Errore nel caricamento delle categorie: ${errore.message}</td></tr>`);
+            }
+        }
+
+        /**
+         * Apre il modale per aggiungere o modificare una categoria
+         */
+        async function apriModaleCategoria(idCategoria = null) {
+            $('#categoryForm')[0].reset();
+            $('#category-modal-feedback').empty().removeClass('alert-danger alert-success');
+            $('#categoryId').val(idCategoria || '');
+
+            if (idCategoria) {
+                $('#categoryModalLabel').text('Modifica Categoria');
+                $('#saveCategoryBtn').text('Salva Modifiche');
+                try {
+                    const categoria = await fetchAutenticato(`${urlBaseApi}/api/categories/${idCategoria}`);
+                    $('#categoryName').val(categoria.name);
+                    $('#categoryDescription').val(categoria.description);
+                } catch (errore) {
+                    console.error("Errore nel caricare i dati della categoria per la modifica:", errore);
+                    mostraAlertModaleCategoria(`Impossibile caricare i dati della categoria. ${errore.message}`, 'danger');
+                    return;
+                }
+            } else {
+                $('#categoryModalLabel').text('Aggiungi Nuova Categoria');
+                $('#saveCategoryBtn').text('Aggiungi Categoria');
+            }
+
+            if (modaleCategoria) {
+                modaleCategoria.show();
+            } else {
+                console.error("Istanza della modale categoria non disponibile.");
+            }
+        }
+
+        /**
+         * Salva una categoria (aggiunta o modifica)
+         */
+        async function salvaCategoria() {
+            const pulsanteSalva = $('#saveCategoryBtn');
+            const spinner = pulsanteSalva.find('.spinner-border');
+            const containerFeedback = $('#category-modal-feedback');
+            containerFeedback.empty().removeClass('alert-danger alert-success');
+            pulsanteSalva.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            const idCategoria = $('#categoryId').val();
+            const inModifica = !!idCategoria;
+            const datiCategoria = {
+                name: $('#categoryName').val().trim(),
+                description: $('#categoryDescription').val().trim()
+            };
+
+            if (!datiCategoria.name) {
+                mostraAlertModaleCategoria('Per favore, inserisci il nome della categoria.', 'danger');
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+                return;
+            }
+
+            const url = inModifica ? `${urlBaseApi}/api/categories/${idCategoria}` : `${urlBaseApi}/api/categories`;
+            const metodo = inModifica ? 'PUT' : 'POST';
+
+            try {
+                await fetchAutenticato(url, {method: metodo, body: datiCategoria});
+                mostraAlertModaleCategoria(`Categoria ${inModifica ? 'modificata' : 'aggiunta'} con successo!`, 'success');
+
+                await caricaCategorie();
+                caricaCategorieTutte();
+                setTimeout(() => {
+                    if (modaleCategoria) modaleCategoria.hide();
+                }, 1500);
+
+            } catch (errore) {
+                console.error(`Errore durante il salvataggio della categoria (${metodo} ${url}):`, errore);
+                mostraAlertModaleCategoria(`Errore: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            } finally {
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+            }
+        }
+
+        /**
+         * Elimina una categoria
+         */
+        async function cancellaCategoria(idCategoria) {
+            if (!confirm(`Sei sicuro di voler disattivare la categoria ID ${idCategoria}? L'operazione la renderà inattiva.`)) {
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/categories/${idCategoria}`, {method: 'DELETE'});
+                await caricaCategorie();
+                caricaCategorieTutte();
+            } catch (errore) {
+                console.error(`Errore durante l'eliminazione della categoria ID ${idCategoria}:`, errore);
+                alert(`Errore durante l'eliminazione: ${errore.message || 'Si è verificato un problema.'}`);
+            }
+        }
+
+        /**
+         * Mostra un alert all'interno del modale categoria
+         */
+        function mostraAlertModaleCategoria(messaggio, tipo = 'danger') {
+            const containerFeedback = $('#category-modal-feedback');
+            containerFeedback.removeClass('alert-danger alert-success').addClass(`alert alert-${tipo}`).html(messaggio);
+        }
+
+        /**
+         * Restituisce la classe CSS del badge per lo stato ordine
+         */        function getStatoOrdineBadge(stato) {
+            switch (stato?.toLowerCase()) {
+                case 'pending':
+                    return 'warning';
+                case 'paid':
+                    return 'info';
+                case 'processing':
+                    return 'info';
+                case 'preparing':
+                    return 'primary';
+                case 'shipped':
+                    return 'warning';
+                case 'delivered':
+                    return 'success';
+                case 'cancelled':
+                    return 'danger';
+                case 'refunded':
+                    return 'secondary';
+                default:
+                    return 'secondary';
+            }
+        }
+
+        /**
+         * Traduce lo stato dell'ordine dall'inglese all'italiano
+         */        function traduciStatoOrdine(stato) {
+            const traduzioni = {
+                'pending': 'In Attesa di Pagamento',
+                'paid': 'Pagato',
+                'processing': 'In Lavorazione',
+                'preparing': 'In Preparazione',
+                'shipped': 'Spedito',
+                'delivered': 'Consegnato',
+                'cancelled': 'Annullato',
+                'refunded': 'Rimborsato'
+            };
+            return traduzioni[stato?.toLowerCase()] || stato;
+        }
+
+        /**
+         * Aggiorna il badge del carrello con un ritardo
+         */
+        function aggiornaBadgeCarrelloConRitardo() {
+            setTimeout(aggiornaBadgeCarrello, 500);
+        }
+
+        /**
+         * Aggiorna il contatore del badge del carrello
+         */
+        function aggiornaBadgeCarrello() {
+            const carrello = JSON.parse(localStorage.getItem('cart')) || {};
+            let totaleArticoli = 0;
+            for (const idProdotto in carrello) {
+                totaleArticoli += carrello[idProdotto].quantity;
+            }
+            $('#header-placeholder').find('.badge').text(totaleArticoli);
+        }
+
+        /**
+         * Esegue chiamate API autenticate
+         */
+        function fetchAutenticato(url, opzioni = {}) {
+            if (!tokenSessione) {
+                console.error("Tentativo di chiamata autenticata senza token.");
+                logout();
+                return Promise.reject(new Error('Token non disponibile'));
+            }
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${tokenSessione}`,
+                ...opzioni.headers,
+            };
+
+            if (opzioni.body && typeof opzioni.body === 'object') {
+                opzioni.body = JSON.stringify(opzioni.body);
+            }
+
+            return fetch(url, {...opzioni, headers})
+                .then(risposta => {
+                    if (risposta.status === 401 || risposta.status === 403) {
+                        console.warn(`Errore di autorizzazione (${risposta.status}) per ${url}. Effettuo il logout.`);
+                        logout();
+                        throw new Error(`Non autorizzato: ${risposta.status}`);
+                    }
+                    if (!risposta.ok) {
+                        return risposta.json().catch(() => null).then(corpoErrore => {
+                            const messaggioErrore = corpoErrore?.message || risposta.statusText || `Errore HTTP: ${risposta.status}`;
+                            console.error(`Errore nella richiesta a ${url} (${risposta.status}): ${messaggioErrore}`, corpoErrore);
+                            throw new Error(messaggioErrore);
+                        });
+                    }
+                    if (risposta.status === 204) {
+                        return null;
+                    }
+                    return risposta.json();
+                })
+                .catch(errore => {
+                    if (errore instanceof Error && errore.message) {
+                        throw errore;
+                    }
+                    console.error(`Errore di rete o fetch per ${url}:`, errore);
+                    throw new Error(`Errore di rete o connessione: ${errore.message || 'Impossibile comunicare con il server.'}`);
+                });
+        }
+
+        /**
+         * Carica tutti gli ordini per artigiani o admin
+         */
+        async function caricaOrdiniTuttiArtigiani() {
+            const corpoTabella = $('#all-orders-table');
+            corpoTabella.empty().html('<tr><td colspan="6" class="text-center text-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Caricamento ordini...</td></tr>');
+            $('#all-orders-feedback').empty();
+
+            try {
+                let datiOrdini = {};
+                if (datiUtente.role === "artigiano") {
+                    datiOrdini = await fetchAutenticato(`${urlBaseApi}/api/orders?artisanId=${datiUtente.user_id}`);
+                } else if (datiUtente.role === "admin") {
+                    datiOrdini = await fetchAutenticato(`${urlBaseApi}/api/orders`);
+                }
+                corpoTabella.empty();
+                const ordini = datiOrdini.orders || [];
+
+                if (ordini.length === 0) {
+                    corpoTabella.append('<tr><td colspan="6" class="text-center text-muted">Nessun ordine trovato.</td></tr>');
+                    return;
+                }
+
+                ordini.forEach(ordine => {
+                    const htmlAzioni = `
+                        <div class="d-flex gap-1">
+                           <a href="account/ordini.html?id=${ordine.order_id}" target="_blank" class="btn btn-sm btn-outline-dark" title="Vedi Dettagli">
+                                <i class="bi bi-eye"></i>
+                           </a>
+                           ${generatoreAzioniOrdini(ordine.order_id, ordine.status)}
+                        </div>
+                    `;
+
+                    corpoTabella.append(`
+                        <tr id="order-row-${ordine.order_id}">
+                            <td>${ordine.order_id}</td>
+                            <td>${ordine.customer_full_name || `ID: ${ordine.customer_id}`}</td>
+                            <td>${new Date(ordine.order_date).toLocaleDateString()}</td>
+                            <td><span class="badge bg-${getStatoOrdineBadge(ordine.status)}" id="status-badge-${ordine.order_id}">${traduciStatoOrdine(ordine.status)}</span></td>
+                            <td>€${parseFloat(ordine.total_amount).toFixed(2)}</td>
+                            <td>${htmlAzioni}</td>
+                        </tr>
+                    `);
+                });
+
+                let listaElementiDropdown = [].slice.call(document.querySelectorAll('.status-dropdown-toggle'))
+                let listaDropdown = listaElementiDropdown.map(function (elementoDropdownToggle) {
+                    return new bootstrap.Dropdown(elementoDropdownToggle)
+                })
+
+
+            } catch (errore) {
+                console.error("Errore caricamento tutti gli ordini:", errore);
+                corpoTabella.html(`<tr><td colspan="6" class="text-center text-danger">Errore nel caricamento degli ordini: ${errore.message}</td></tr>`);
+            }
+        }
+
+        /**
+         * Genera le azioni disponibili per un ordine
+         */
+        function generatoreAzioniOrdini(idOrdine, statoAttuale) {
+            let prossimiStati = {};
+            if (datiUtente.role && datiUtente.role === 'admin') {
+                prossimiStati = {
+                    'pending': ['paid', 'cancelled'],
+                    'paid': ['processing', 'cancelled'],
+                    'processing': ['preparing', 'shipped', 'cancelled'],
+                    'preparing': ['shipped', 'cancelled'],
+                    'shipped': ['delivered', 'refunded'],
+                    'delivered': ['refunded'],
+                    'cancelled': [],
+                    'refunded': []
+                };
+            } else if (datiUtente.role && datiUtente.role === 'artigiano') {
+                prossimiStati = {
+                    'paid': ['processing'],
+                    'processing': ['preparing'],
+                    'preparing': ['shipped'],
+                };
+            }
+
+
+            const azioniDisponibili = prossimiStati[statoAttuale] || [];
+
+            if (azioniDisponibili.length === 0) return '';
+            let elementiDropdown = '';
+            azioniDisponibili.forEach(stato => {
+                elementiDropdown += `<li><button class="dropdown-item small update-status-btn" data-order-id="${idOrdine}" data-new-status="${stato}">Imposta come "${traduciStatoOrdine(stato)}"</button></li>`;
+            });
+
+            return `
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-dark dropdown-toggle status-dropdown-toggle" type="button" id="dropdownMenuButton-${idOrdine}" data-bs-toggle="dropdown" aria-expanded="false" title="Cambia Stato">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton-${idOrdine}">
+                        ${elementiDropdown}
+                    </ul>
+                </div>
+            `;
+        }
+
+        /**
+         * Genera l'HTML per il pulsante "Vedi Dettagli"
+         */
+        function azioniHtmlNoDropdown(idOrdine) {
+            return `<a href="account/ordini.html?id=${idOrdine}" target="_blank" class="btn btn-sm btn-outline-dark" title="Vedi Dettagli"><i class="bi bi-eye"></i></a>`;
+        }
+
+        /**
+         * Mostra un alert nella dashboard
+         */
+        function mostraAlertDashboard(messaggio, tipo = 'success') {
+            const containerFeedback = $('#all-orders-feedback');
+            const htmlAlert = `<div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+                                ${messaggio}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                              </div>`;
+            containerFeedback.html(htmlAlert);
+        }
+
+        /**
+         * Esegue il logout dell'utente
+         */
+        function logout() {
+            localStorage.removeItem('sessionToken');
+            localStorage.removeItem('userData');
+            window.location.href = 'auth/autenticazione.html';
+        }
+    </script>
+</head>
+<body>
+
+<div id="header-placeholder"></div>
+
+<!-- Main Content -->
+<div class="container-xxl p-4 p-md-5 pt-4 mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h3 fw-bold">Dashboard Artigiano</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark py-2" id="addCategoryBtn" style="display: none;">
+                <i class="bi bi-plus-lg me-2"></i>Aggiungi Categoria
+            </button>
+            <button class="btn btn-dark py-2" id="addProductBtn">
+                <i class="bi bi-plus-lg me-2"></i>Aggiungi Prodotto
+            </button>
+        </div>
+    </div>
+    <div id="dashboard-feedback"></div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4" id="dashboardTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link text-dark active" id="overview-tab" data-bs-toggle="tab"
+                    data-bs-target="#overview-tab-pane"
+                    type="button" role="tab" aria-controls="overview-tab-pane" aria-selected="true">Panoramica
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link text-dark" id="products-management-tab" data-bs-toggle="tab"
+                    data-bs-target="#products-management-tab-pane"
+                    type="button" role="tab" aria-controls="products-management-tab-pane" aria-selected="false">Gestione
+                Prodotti
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link text-dark" id="orders-management-tab" data-bs-toggle="tab"
+                    data-bs-target="#orders-management-tab-pane"
+                    type="button" role="tab" aria-controls="orders-management-tab-pane" aria-selected="false">Gestione
+                Ordini
+            </button>
+        </li>
+        <li class="nav-item" role="presentation" id="categories-tab-item" style="display: none;">
+            <button class="nav-link text-dark" id="categories-management-tab" data-bs-toggle="tab"
+                    data-bs-target="#categories-management-tab-pane"
+                    type="button" role="tab" aria-controls="categories-management-tab-pane" aria-selected="false">
+                Gestione
+                Categorie
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="dashboardTabsContent">
+        <div class="tab-pane fade show active" id="overview-tab-pane" role="tabpanel" aria-labelledby="overview-tab"
+             tabindex="0">
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header d-flex flex-row align-items-center justify-content-between pb-2 bg-transparent border-bottom-0">
+                            <h5 class="card-title fs-6 fw-medium mb-0">Ordini Ricevuti</h5>
+                            <i class="bi bi-bag fs-5 text-secondary"></i>
+                        </div>
+                        <div class="card-body pt-0">
+                            <div class="h4 fw-bold" id="total-orders">--</div>
+                            <p class="small text-muted mb-0">Ordini contenenti tuoi prodotti.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header d-flex flex-row align-items-center justify-content-between pb-2 bg-transparent border-bottom-0">
+                            <h5 class="card-title fs-6 fw-medium mb-0">Prodotti Attivi</h5>
+                            <i class="bi bi-box-seam fs-5 text-secondary"></i>
+                        </div>
+                        <div class="card-body pt-0">
+                            <div class="h4 fw-bold" id="total-products">--</div>
+                            <p class="small text-muted mb-0">Prodotti visibili nel catalogo.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ordini Recenti -->
+            <div class="row g-4">
+                <div class="col-12" id="ordini-recenti">
+                    <div class="card p-2 shadow-sm">
+                        <div class="card-header bg-white border-bottom-0">
+                            <h5 class="card-title mb-1 fw-bold">Ordini Recenti (<span class="fw-normal">Contenenti tuoi prodotti</span>)
+                            </h5>
+                            <p class="card-text text-muted small">Visualizza gli ultimi ordini ricevuti.</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle">
+                                    <thead>
+                                    <tr>
+                                        <th>ID Ordine</th>
+                                        <th>Cliente</th>
+                                        <th>Data</th>
+                                        <th>Stato</th>
+                                        <th>Totale Ordine</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody id="recent-orders-table">
+                                    <!-- Caricato da JS -->
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">Caricamento...</td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Gestione Prodotti -->
+        <div class="tab-pane fade" id="products-management-tab-pane" role="tabpanel"
+             aria-labelledby="products-management-tab" tabindex="0">
+            <div class="card p-2 shadow-sm">
+                <div class="card-header bg-white border-bottom-0">
+                    <h5 class="card-title mb-1 fw-bold">I Tuoi Prodotti</h5>
+                    <p class="card-text text-muted small">Gestisci il tuo inventario, modifica prezzi e dettagli.</p>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead>
+                            <tr>
+                                <th>Nome Prodotto</th>
+                                <th>Categoria</th>
+                                <th>Prezzo</th>
+                                <th>Disponibilità</th>
+                                <th>Stato</th>
+                                <th>Azioni</th>
+                            </tr>
+                            </thead>
+                            <tbody id="products-table">
+                            <!-- Caricato da JS -->
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Caricamento...</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestione Ordini -->
+        <div class="tab-pane fade" id="orders-management-tab-pane" role="tabpanel"
+             aria-labelledby="orders-management-tab" tabindex="0">
+            <div class="card p-2 shadow-sm">
+                <div class="card-header bg-white border-bottom-0">
+                    <h5 class="card-title mb-1 fw-bold">Gestione Ordini</h5>
+                    <p class="card-text text-muted small">Visualizza e aggiorna lo stato degli ordini che includono i
+                        tuoi prodotti.</p>
+                </div>
+                <div class="card-body">
+                    <div id="all-orders-feedback" class="mb-3"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead>
+                            <tr>
+                                <th>ID Ordine</th>
+                                <th>Cliente</th>
+                                <th>Data</th>
+                                <th>Stato</th>
+                                <th>Totale Ordine</th>
+                                <th>Azioni</th>
+                            </tr>
+                            </thead>
+                            <tbody id="all-orders-table">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Caricamento ordini...</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestione Categorie -->
+        <div class="tab-pane fade" id="categories-management-tab-pane" role="tabpanel"
+             aria-labelledby="categories-management-tab" tabindex="0">
+            <div class="card p-2 shadow-sm">
+                <div class="card-header bg-white border-bottom-0">
+                    <h5 class="card-title mb-1 fw-bold">Gestione Categorie</h5>
+                    <p class="card-text text-muted small">Visualizza e gestisci le categorie dei prodotti.</p>
+                </div>
+                <div class="card-body">
+                    <div id="categories-feedback" class="mb-3"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead>
+                            <tr>
+                                <th>Nome Categoria</th>
+                                <th>Descrizione</th>
+                                <th>Azioni</th>
+                            </tr>
+                            </thead>
+                            <tbody id="categories-table">
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">Caricamento categorie...</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Prodotto -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="productForm">
+                <div class="modal-header bg-white border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="productModalLabel">Aggiungi Nuovo Prodotto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-0">
+                    <div id="product-modal-feedback" class="mb-3"></div>
+                    <input type="hidden" id="productId">
+
+                    <div class="mb-3">
+                        <label for="productName" class="form-label">Nome Prodotto <span
+                                class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="productName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="productDescription" class="form-label">Descrizione</label>
+                        <textarea class="form-control" id="productDescription" rows="3"></textarea>
+                    </div>
+                    <div class="row mb-3 gy-3">
+                        <div class="col-md-6">
+                            <label for="productSku" class="form-label">SKU (Codice Articolo)</label>
+                            <input type="text" class="form-control" id="productSku" placeholder="Opzionale">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="productCategory" class="form-label">Categoria <span class="text-danger">*</span></label>
+                            <select class="form-select" id="productCategory" required>
+                                <option selected disabled value="">Caricamento...</option>
+                                <!-- Caricato da JS -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3 gy-3">
+                        <div class="col-md-6">
+                            <label for="productPrice" class="form-label">Prezzo (€) <span
+                                    class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="productPrice" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="productStock" class="form-label">Quantità Disponibile <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="productStock" min="0" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="productImageUrl" class="form-label">URL Immagine</label>
+                        <input type="url" class="form-control" id="productImageUrl"
+                               placeholder="https://esempio.com/immagine.jpg">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="productIsActive" checked>
+                        <label class="form-check-label" for="productIsActive">
+                            Prodotto Attivo (visibile nel negozio)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top-0 pt-0">
+                    <div class="row gx-1 w-100">
+                        <div class="col-6">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="submit" class="btn btn-dark w-100" id="saveProductBtn">
+                                <span class="spinner-border spinner-border-sm d-none me-1" role="status"
+                                      aria-hidden="true"></span>
+                                Salva Prodotto
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Spedizione -->
+<div class="modal fade" id="shippingInfoModal" tabindex="-1" aria-labelledby="shippingInfoModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="shippingInfoForm">
+                <div class="modal-header bg-white border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="shippingInfoModalLabel">Informazioni Spedizione</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="shipping-modal-feedback" class="mb-3"></div>
+                    <input type="hidden" id="shippingOrderId">
+                    <input type="hidden" id="shippingNewStatus" value="shipped">
+                    <p>Stai impostando lo stato dell'ordine <strong id="shippingOrderIdDisplay"></strong> come
+                        "Spedito".</p>
+                    <div class="mb-3">
+                        <label for="shippingTrackingNumber" class="form-label">Codice Tracking</label>
+                        <input type="text" class="form-control" id="shippingTrackingNumber" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shippingNotes" class="form-label">Note (Opzionale)</label>
+                        <textarea class="form-control" id="shippingNotes" rows="3"
+                                  placeholder="Esempio: Corriere Espresso DHL"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top-0 pt-0">
+                    <div class="row gx-1 w-100">
+                        <div class="col-6">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="submit" class="btn btn-dark w-100" id="saveShippingInfoBtn">
+                                <span class="spinner-border spinner-border-sm d-none me-1" role="status"
+                                      aria-hidden="true"></span>
+                                Imposta come Spedito
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Categoria -->
+<div class="modal fade" id="categoryModal" tabindex="-1" aria-labelledby="categoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="categoryForm">
+                <div class="modal-header bg-white border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="categoryModalLabel">Aggiungi Nuova Categoria</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-0">
+                    <div id="category-modal-feedback" class="mb-3"></div>
+                    <input type="hidden" id="categoryId">
+
+                    <div class="mb-3">
+                        <label for="categoryName" class="form-label">Nome Categoria <span
+                                class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="categoryName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryDescription" class="form-label">Descrizione</label>
+                        <textarea class="form-control" id="categoryDescription" rows="3"
+                                  placeholder="Descrizione opzionale della categoria"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top-0 pt-0">
+                    <div class="row gx-1 w-100">
+                        <div class="col-6">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="submit" class="btn btn-dark w-100" id="saveCategoryBtn">
+                                <span class="spinner-border spinner-border-sm d-none me-1" role="status"
+                                      aria-hidden="true"></span>
+                                Salva Categoria
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="footer-placeholder"></div>
+
+</body>
+</html>

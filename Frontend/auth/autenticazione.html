@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autenticazione - Artigianato Online</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="../images/favicon.png">
+
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link type="text/css" rel="stylesheet" href="../css/style.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script>
+        const urlBaseApi = "";
+
+        $(document).ready(function () {
+
+            // Token
+            const token = localStorage.getItem('sessionToken');
+            if (token) {
+                window.location.href = '../account.html';
+                return;
+            }
+
+            /**
+             * Mostra un messaggio di alert nell'interfaccia
+             * @param {string} messaggio - Il messaggio da mostrare
+             * @param {string} tipo - Il tipo di alert ('success', 'danger', 'warning', 'info')
+             * @param {string} idContenitore - L'ID del contenitore dove mostrare l'alert
+             */
+            function mostraAlert(messaggio, tipo = 'danger', idContenitore) {
+                const htmlAlert = `<div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+                              ${messaggio}
+                              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                           </div>`;
+                $(`#${idContenitore}`).prepend(htmlAlert);
+            }
+
+            /**
+             * Rimuove tutti gli alert da un contenitore
+             * @param {string} idContenitore - L'ID del contenitore da cui rimuovere gli alert
+             */
+            function rimuoviAlert(idContenitore) {
+                $(`#${idContenitore} .alert`).remove();
+            }            // Login
+            $('#loginForm').submit(function (e) {
+                e.preventDefault();
+                rimuoviAlert('login-feedback');
+                const pulsanteLogin = $(this).find('button[type="submit"]');
+                const testoOriginale = pulsanteLogin.html();
+                pulsanteLogin.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Accesso...');
+
+                const email = $('#emailAccedi').val();
+                const password = $('#passwordAccedi').val();
+                const ricordami = $('#remember').is(':checked');
+
+                $.ajax({
+                    url: `${urlBaseApi}/api/auth/login`,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({email: email, password: password}),
+                    success: function (response) {
+                        localStorage.setItem('sessionToken', response.token);
+                        localStorage.setItem('userData', JSON.stringify(response.user));
+                        window.location.href = '../account.html';
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Login error:", xhr.responseText);
+                        let messaggioErrore = "Errore durante il login. Riprova.";
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            messaggioErrore = xhr.responseJSON.message;
+                        } else if (xhr.status === 401) {
+                            messaggioErrore = "Credenziali non valide.";
+                        }
+                        mostraAlert(messaggioErrore, 'danger', 'login-feedback');
+                        pulsanteLogin.prop('disabled', false).html(testoOriginale);
+                    }
+                });
+            });
+
+            // Gestione artigiano
+            $('input[name="account-type"]').change(function () {
+                if ($('#artigiano').is(':checked')) {
+                    $('#artisan-fields').slideDown();
+                    $('#shop-name').prop('required', true);
+                    $('#shop-description').prop('required', true);
+                } else {
+                    $('#artisan-fields').slideUp();
+                    $('#shop-name').prop('required', false);
+                    $('#shop-description').prop('required', false);
+                }
+            });            // Registrazione
+            $('#registerForm').submit(function (e) {
+                e.preventDefault();
+                rimuoviAlert('register-feedback');
+                const pulsanteRegistrazione = $(this).find('button[type="submit"]');
+                const testoOriginale = pulsanteRegistrazione.html();
+
+                // Validazione
+                const password = $('#password-register').val();
+                const confermaPassword = $('#confirm-password').val();
+                const terminiAccettati = $('#terms').is(':checked');
+
+                if (password !== confermaPassword) {
+                    mostraAlert("Le password non coincidono.", 'warning', 'register-feedback');
+                    return;
+                }
+                if (!terminiAccettati) {
+                    mostraAlert("Devi accettare i Termini e Condizioni e la Policy sulla Privacy.", 'warning', 'register-feedback');
+                    return;
+                }
+
+                pulsanteRegistrazione.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Registrazione...');
+
+                const nome = $('#first-name').val();
+                const cognome = $('#last-name').val();
+                const email = $('#email-register').val();
+                const tipoAccount = $('input[name="account-type"]:checked').attr('id'); // 'cliente' o 'artigiano'
+
+                const datiRegistrazione = {
+                    email: email,
+                    password: password,
+                    role: tipoAccount,
+                    full_name: `${nome} ${cognome}`
+                };
+
+                // Campi artigiano
+                if (tipoAccount === 'artigiano') {
+                    const nomeShop = $('#shop-name').val();
+                    const descrizioneShop = $('#shop-description').val();
+
+                    if (!nomeShop || !descrizioneShop) {
+                        mostraAlert("Per registrarsi come artigiano, è necessario inserire Nome e Descrizione del negozio.", 'warning', 'register-feedback');
+                        pulsanteRegistrazione.prop('disabled', false).html(testoOriginale);
+                        return;
+                    }
+
+                    datiRegistrazione.shop_name = nomeShop;
+                    datiRegistrazione.shop_description = descrizioneShop;
+                }
+
+                $.ajax({
+                    url: `${urlBaseApi}/api/auth/register`,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(datiRegistrazione),
+                    success: function (response) {
+                        mostraAlert(`Registrazione avvenuta con successo per ${response.user.email}. Puoi ora effettuare l'accesso.`, 'success', 'register-feedback');
+                        $('#registerForm')[0].reset();
+                        pulsanteRegistrazione.prop('disabled', false).html(testoOriginale);
+                        $('#accedi-tab').tab('show');
+                        $('#emailAccedi').val(email);
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Registration error:", xhr.responseText);
+                        let messaggioErrore = "Errore durante la registrazione. Riprova.";
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            messaggioErrore = xhr.responseJSON.message;
+                        } else if (xhr.status === 409) {
+                            messaggioErrore = "Email già in uso, per favore sceglierne un'altra.";
+                        }
+                        mostraAlert(messaggioErrore, 'danger', 'register-feedback');
+                        pulsanteRegistrazione.prop('disabled', false).html(testoOriginale);
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+
+<div class="container pb-5 pt-4">
+
+    <div class="row mb-3">
+        <div class="col">
+            <a href="../index.html" class="link-dark text-decoration-none"><p class="small"><i
+                    class="bi bi-arrow-left"></i> Continua a fare shopping</p></a>
+        </div>
+    </div>
+
+    <h1 class="fs-2 fw-bold mb-4 text-start">Autenticazione</h1>
+
+    <div class="col-lg-8 mx-auto">
+
+        <!-- Login/Registrazione -->
+        <ul class="nav nav-tabs nav-fill mb-3" id="accountTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active text-dark" id="accedi-tab" data-bs-toggle="tab"
+                        data-bs-target="#accedi-tab-pane" type="button" role="tab" aria-controls="accedi-tab-pane"
+                        aria-selected="true">Accedi
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link text-dark" id="registrati-tab" data-bs-toggle="tab"
+                        data-bs-target="#registrati-tab-pane" type="button" role="tab"
+                        aria-controls="registrati-tab-pane" aria-selected="false">Registrati
+                </button>
+            </li>
+        </ul>
+
+        <!-- Login o registrazione effettiva -->
+        <div class="tab-content" id="accountTabContent">
+
+            <!-- Login -->
+            <div class="tab-pane fade show active" id="accedi-tab-pane" role="tabpanel" aria-labelledby="accedi-tab"
+                 tabindex="0">
+                <div class="card p-3">
+                    <form id="loginForm">
+                        <div class="card-header bg-white border-bottom border-white">
+                            <h4 class="card-title mb-1 fw-bold">Accedi al tuo account</h4>
+                            <p class="card-text text-muted small">Inserisci le tue credenziali per accedere al tuo
+                                account.</p>
+                        </div>
+                        <div class="card-body pb-0">
+                            <div id="login-feedback"></div>
+                            <div class="mb-3">
+                                <label for="emailAccedi" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="emailAccedi" placeholder="nome@esempio.com"
+                                       required>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="passwordAccedi" class="form-label mb-0">Password</label>
+                                    <a href="passwordreset.html" class="small link-dark text-decoration-none">Password
+                                        dimenticata?</a>
+                                </div>
+                                <input type="password" class="form-control" id="passwordAccedi" required>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="remember">
+                                <label class="form-check-label small" for="remember">
+                                    Ricordami
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-white border-top border-white pt-0">
+                            <button type="submit" class="btn btn-dark w-100" id="">Accedi</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Registrazione effettiva -->
+            <div class="tab-pane fade" id="registrati-tab-pane" role="tabpanel" aria-labelledby="registrati-tab"
+                 tabindex="0">
+                <div class="card p-3">
+                    <form id="registerForm">
+                        <div class="card-header bg-white border-bottom border-white">
+                            <h4 class="card-title mb-1 fw-bold">Crea un nuovo account</h4>
+                            <p class="card-text text-muted small">Registrati per iniziare a fare acquisti o vendere i
+                                tuoi prodotti artigianali.</p>
+                        </div>
+                        <div class="card-body pb-0">
+                            <div id="register-feedback"></div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label for="first-name" class="form-label">Nome</label>
+                                    <input type="text" class="form-control" id="first-name" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="last-name" class="form-label">Cognome</label>
+                                    <input type="text" class="form-control" id="last-name" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email-register" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="email-register"
+                                       placeholder="nome@esempio.com" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="password-register" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="password-register" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="confirm-password" class="form-label">Conferma Password</label>
+                                <input type="password" class="form-control" id="confirm-password" required>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label d-block">Tipo di account</label>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="account-type"
+                                                   id="cliente" checked>
+                                            <label class="form-check-label fw-normal" for="cliente">
+                                                Cliente
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="account-type"
+                                                   id="artigiano">
+                                            <label class="form-check-label fw-normal" for="artigiano">
+                                                Artigiano
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="artisan-fields" class="row g-3 mb-3 mt-3" style="display: none;">
+                                    <div class="col-md-6">
+                                        <label for="shop-name" class="form-label">Nome Negozio</label>
+                                        <input type="text" class="form-control" id="shop-name">
+                                        <div class="form-text">Il nome che verrà visualizzato dai clienti.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="shop-description" class="form-label">Descrizione Negozio</label>
+                                        <textarea class="form-control" id="shop-description" rows="3"></textarea>
+                                        <div class="form-text">Una breve descrizione della tua attività.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="terms">
+                                <label class="form-check-label small" for="terms">
+                                    Accetto <a href="/termini" class="link-dark text-decoration-none">Termini e
+                                    Condizioni</a> e <a href="/privacy" class="link-dark text-decoration-none">Privacy
+                                    Policy</a>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-white border-top border-white pt-0">
+                            <button type="submit" class="btn btn-dark w-100">Registrati</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
+        crossorigin="anonymous"></script>
+</body>
+</html>

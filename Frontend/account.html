@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Account - Artigianato Online</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="images/favicon.png">
+
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link type="text/css" rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script>
+        const urlBaseApi = "";
+        let tokenSessione = localStorage.getItem('sessionToken');
+        const datiUtenteStringa = localStorage.getItem('userData');
+        let datiUtente = null;
+
+        const elementiTooltip = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const listaTooltip = [...elementiTooltip].map(elementoTooltip => new bootstrap.Tooltip(elementoTooltip));
+        $(document).ready(function () {
+
+            if (!tokenSessione || !datiUtenteStringa) {
+                const tokenCookie = ottieniCookie('sessionToken');
+                if (tokenCookie) {
+                    verificaTokenECarica(tokenCookie);
+                } else {
+                    eseguiLogout();
+                }
+                return;
+            }
+
+            try {
+                datiUtente = JSON.parse(datiUtenteStringa);
+                if (!datiUtente || typeof datiUtente !== 'object' || !datiUtente.user_id) {
+                    if (tokenSessione) {
+                        verificaTokenECarica(tokenSessione);
+                    } else {
+                        eseguiLogout();
+                    }
+                    return;
+                }
+            } catch (e) {
+                eseguiLogout();
+                return;
+            }
+
+            inizializza();
+
+            const elementoModaleIndirizzo = document.getElementById('addressModal');
+            const modaleIndirizzo = bootstrap.Modal.getOrCreateInstance(elementoModaleIndirizzo);
+            const formIndirizzo = $('#addressForm');
+            const pulsanteSalvaIndirizzo = $('#save-address-button');
+            const spinnerSalvaIndirizzo = pulsanteSalvaIndirizzo.find('.spinner-border');
+            const feedbackModaleIndirizzo = $('#address-modal-feedback');
+            const textareaIndirizzo = $('#address-text');
+
+            const modaleModificaProfilo = document.getElementById('editProfileModal');
+            const feedbackModaleModificaProfilo = $('#edit-profile-modal-feedback');
+            const inputNomeModificaProfilo = $('#edit-profile-name');
+            elementoModaleIndirizzo.addEventListener('show.bs.modal', event => {
+                feedbackModaleIndirizzo.empty().removeClass('alert alert-danger alert-success alert-warning');
+                formIndirizzo[0].reset();
+                textareaIndirizzo.val('');
+                pulsanteSalvaIndirizzo.prop('disabled', false);
+                spinnerSalvaIndirizzo.hide();
+
+                const pulsanteAttivatore = event.relatedTarget;
+                let modalitaModifica = false;
+                if (pulsanteAttivatore && pulsanteAttivatore.id === 'edit-address-button') {
+                    modalitaModifica = true;
+                }
+
+                if (modalitaModifica && datiUtente && datiUtente.address) {
+                    $('#addressModalLabel').text('Modifica Indirizzo');
+                    textareaIndirizzo.val(datiUtente.address);
+                } else {
+                    $('#addressModalLabel').text('Aggiungi Indirizzo di Spedizione');
+                }
+            });
+
+            modaleModificaProfilo.addEventListener('show.bs.modal', event => {
+                feedbackModaleModificaProfilo.empty().removeClass('alert alert-danger alert-success alert-warning');
+                inputNomeModificaProfilo.val(datiUtente.full_name || '');
+            });
+            formIndirizzo.on('submit', function (e) {
+                e.preventDefault();
+                const valoreIndirizzo = textareaIndirizzo.val().trim();
+
+                feedbackModaleIndirizzo.empty().removeClass('alert alert-danger alert-success alert-warning');
+
+                if (!valoreIndirizzo) {
+                    feedbackModaleIndirizzo.addClass('alert alert-warning').text('Per favore, inserisci un indirizzo valido.');
+                    return;
+                }
+
+                if (!datiUtente || !datiUtente.user_id) {
+                    feedbackModaleIndirizzo.addClass('alert alert-danger').text('Errore: Dati utente non trovati.');
+                    return;
+                }
+
+                pulsanteSalvaIndirizzo.prop('disabled', true);
+                spinnerSalvaIndirizzo.show();
+
+                const datiAggiornamento = {
+                    address: valoreIndirizzo
+                };
+
+                eseguiFetchAutenticato(`${urlBaseApi}/api/users/${datiUtente.user_id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(datiAggiornamento)
+                })
+                    .then(utenteAggiornato => {
+                        if (utenteAggiornato && typeof utenteAggiornato.address !== 'undefined') {
+                            datiUtente.address = utenteAggiornato.address;
+                        } else {
+                            console.warn("Risposta API per aggiornamento utente non conteneva l'indirizzo. Aggiorno localmente con il valore inviato.");
+                            datiUtente.address = valoreIndirizzo;
+                        }
+                        localStorage.setItem('userData', JSON.stringify(datiUtente));
+
+                        feedbackModaleIndirizzo.addClass('alert alert-success').text('Indirizzo salvato con successo!');
+
+                        caricaIndirizzo();
+
+                        setTimeout(() => {
+                            modaleIndirizzo.hide();
+                        }, 1500);
+                    })
+                    .catch(error => {
+                        console.error("Errore durante il salvataggio dell'indirizzo:", error);
+                        feedbackModaleIndirizzo.addClass('alert alert-danger').text(`Errore durante il salvataggio: ${error.message || 'Riprova più tardi.'}`);
+                    })
+                    .finally(() => {
+                        pulsanteSalvaIndirizzo.prop('disabled', false);
+                        spinnerSalvaIndirizzo.hide();
+                    });
+            });
+        });
+
+        /**
+         * Verifica la validità di un token e carica i dati utente
+         * @param {string} token - Il token da verificare
+         */
+        function verificaTokenECarica(token) {
+            $.ajax({
+                url: `${urlBaseApi}/api/auth/verify-token`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({token: token}),
+                success: function (response) {
+                    if (response.valid && response.user && response.user.user_id) {
+                        tokenSessione = token;
+                        datiUtente = response.user;
+                        localStorage.setItem('sessionToken', token);
+                        localStorage.setItem('userData', JSON.stringify(response.user));
+                        inizializza();
+                    } else {
+                        eseguiLogout();
+                    }
+                },
+                error: function (xhr, status, error) {
+                    eseguiLogout();
+                }
+            });
+        }
+
+        /**
+         * Inizializza la pagina account caricando i dati e configurando gli eventi
+         */
+        function inizializza() {
+            if (!datiUtente || !datiUtente.user_id) {
+                eseguiLogout();
+                return;
+            }
+
+            caricaInfoUtente();
+            caricaOrdini();
+            caricaIndirizzo();
+            aggiornaBadgeCarrelloConDelay();
+
+            $('#logout-button').on('click', function (e) {
+                e.preventDefault();
+                if (confirm("Sei sicuro di voler uscire?")) {
+                    eseguiLogout();
+                }
+            });
+
+            $('#edit-profile-button').on('click', function (e) {
+                e.preventDefault();
+                $('#edit-profile-name').focus();
+                $('#editProfileModal').modal('show');
+            });
+
+            $('#save-profile-button').on('click', function (e) {
+                e.preventDefault();
+                const nuovoNome = $('#edit-profile-name').val().trim();
+                const elementoFeedback = $('#edit-profile-modal-feedback');
+
+                elementoFeedback.empty().removeClass('alert alert-danger alert-success alert-warning');
+
+                if (!nuovoNome) {
+                    elementoFeedback.addClass('alert alert-warning').text('Per favore, inserisci un nome valido.');
+                    return;
+                }
+
+                const datiAggiornamento = {
+                    full_name: nuovoNome
+                };
+
+                eseguiFetchAutenticato(`${urlBaseApi}/api/users/${datiUtente.user_id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(datiAggiornamento)
+                })
+                    .then(utenteAggiornato => {
+                        if (utenteAggiornato && utenteAggiornato.user.full_name) {
+                            datiUtente.full_name = utenteAggiornato.user.full_name;
+                            $('#user-name-sidebar').text(datiUtente.full_name);
+                        } else {
+                            datiUtente.full_name = nuovoNome;
+                        }
+                        localStorage.setItem('userData', JSON.stringify(datiUtente));
+
+                        elementoFeedback.addClass('alert alert-success').text('Nome salvato con successo!');
+
+                        setTimeout(() => {
+                            $('#editProfileModal').modal('hide');
+                        }, 1500);
+                    })
+                    .catch(error => {
+                        console.error("Errore durante il salvataggio del nome:", error);
+                        elementoFeedback.addClass('alert alert-danger').text(`Errore durante il salvataggio: ${error.message || 'Riprova più tardi.'}`);
+                    });
+            });
+        }
+
+        /**
+         * Carica e visualizza le informazioni dell'utente
+         */
+        function caricaInfoUtente() {
+            if (!datiUtente) return;
+
+            eseguiFetchAutenticato(`${urlBaseApi}/api/users/${datiUtente.user_id}`, {method: 'GET'})
+                .then(data => {
+                    if (data && data.user_id) {
+                        datiUtente = data;
+                        localStorage.setItem('userData', JSON.stringify(datiUtente));
+                    }
+                })
+                .catch(error => {
+                    console.error("Errore durante il caricamento dei dati utente:", error);
+                });
+
+            $('#user-name-sidebar').text(datiUtente.full_name || 'Utente');
+            $('#user-email-sidebar').text(datiUtente.email || '');
+            $('#account-summary-name').text(datiUtente.full_name || 'Riepilogo Account');
+            if (datiUtente.created_at) {
+                const dataIscrizione = new Date(datiUtente.created_at);
+                const dataFormattata = dataIscrizione.toLocaleDateString('it-IT', {year: 'numeric', month: 'long'});
+                $('#account-summary-member-since').text(`Membro da ${dataFormattata}`);
+            } else {
+                $('#account-summary-member-since').text('');
+            }
+
+            console.log(datiUtente);
+            if (datiUtente.role && (datiUtente.role === 'artigiano' || datiUtente.role === 'admin')) {
+                $('#dashboardBtn').removeClass('d-none');
+            }
+        }
+
+        /**
+         * Carica e visualizza l'elenco degli ordini dell'utente
+         */
+        function caricaOrdini() {
+            const contenitore = $('#order-list-container');
+            const template = $('#order-template');
+            const messaggioNessunOrdine = $('#no-orders-message');
+            const indicatoreCaricamento = $('#orders-loading');
+
+            contenitore.empty();
+            messaggioNessunOrdine.hide();
+            indicatoreCaricamento.show();
+
+            eseguiFetchAutenticato(`${urlBaseApi}/api/orders`, {method: 'GET'})
+                .then(data => {
+                    indicatoreCaricamento.hide();
+                    const ordini = Array.isArray(data) ? data : (data.orders || []);
+                    $('#total-orders-summary').text(ordini.length);
+
+                    if (ordini.length === 0) {
+                        messaggioNessunOrdine.show();
+                    } else {
+                        ordini.forEach(ordine => {
+                            const elementoOrdine = template.clone();
+                            elementoOrdine.removeAttr('id');
+                            elementoOrdine.find('.order-id').text(`Ordine ${ordine.order_id}`);
+                            elementoOrdine.find('.order-date').text(formattaData(ordine.order_date));
+                            elementoOrdine.find('.order-total').text(`€${parseFloat(ordine.total_amount || 0).toFixed(2)}`);
+
+                            const badgeStato = elementoOrdine.find('.order-status');
+                            badgeStato.text(traduciStatoOrdine(ordine.status));
+                            badgeStato.removeClass('bg-dark bg-warning bg-info bg-primary bg-success bg-secondary')
+                                .addClass(ottieniClasseBadgeStato(ordine.status) + ' badge');
+                            badgeStato.attr('data-bs-toggle', 'tooltip').attr('title', `Stato: ${ordine.status}`);
+
+                            elementoOrdine.find('.order-details-link').attr('href', `account/ordini.html?id=${ordine.order_id}`);
+
+                            const anteprimaProdotto = elementoOrdine.find('.order-product-preview');
+                            const primoArticolo = ordine.order_items && ordine.order_items.length > 0 ? ordine.order_items[0] : null;
+                            if (primoArticolo && primoArticolo.product && primoArticolo.product.name) {
+                                anteprimaProdotto.find('.product-image-preview').attr('src', primoArticolo.product.image_url || 'images/favicon.png').attr('alt', primoArticolo.product.name);
+                                anteprimaProdotto.find('.product-name-preview').text(primoArticolo.product.name);
+                                if (ordine.order_items.length > 1) {
+                                    anteprimaProdotto.find('.product-more-preview').text(`+ altri ${ordine.order_items.length - 1} articoli`).show();
+                                } else {
+                                    anteprimaProdotto.find('.product-more-preview').hide();
+                                }
+                                anteprimaProdotto.show();
+                            } else {
+                                anteprimaProdotto.hide();
+                            }
+
+                            elementoOrdine.show();
+                            contenitore.append(elementoOrdine);
+                        });
+                        const nuoviElementiTooltip = contenitore[0].querySelectorAll('[data-bs-toggle="tooltip"]');
+                        [...nuoviElementiTooltip].map(elementoTooltip => new bootstrap.Tooltip(elementoTooltip));
+                    }
+                })
+                .catch(error => {
+                    indicatoreCaricamento.hide();
+                    console.error("Errore durante il caricamento degli ordini:", error);
+                    contenitore.html('<div class="col-12 text-center text-danger">Impossibile caricare gli ordini. Riprova più tardi.</div>');
+                    $('#total-orders-summary').text('N/D');
+                });
+        }
+
+        /**
+         * Carica e visualizza l'indirizzo di spedizione dell'utente
+         */
+        function caricaIndirizzo() {
+            const visualizzazioneIndirizzo = $('#address-display-card');
+            const sezioneAggiungiIndirizzo = $('#add-address-card');
+            const contenutoIndirizzo = visualizzazioneIndirizzo.find('.address-content');
+
+            if (!datiUtente) {
+                visualizzazioneIndirizzo.hide();
+                sezioneAggiungiIndirizzo.hide();
+                return;
+            }
+            if (contenutoIndirizzo.length === 0) {
+                visualizzazioneIndirizzo.hide();
+                sezioneAggiungiIndirizzo.show();
+                return;
+            }
+
+            if (datiUtente.address && typeof datiUtente.address === 'string' && datiUtente.address.trim() !== '') {
+                const valoreIndirizzo = datiUtente.address.trim();
+
+                const indirizzoFormattato = valoreIndirizzo
+                    .split('\n')
+                    .map(parte => parte.trim())
+                    .filter(parte => parte.length > 0)
+                    .map(parte => `<p class="mb-0">${$('<div>').text(parte).html()}</p>`)
+                    .join('');
+
+                contenutoIndirizzo.html(indirizzoFormattato || '<p class="mb-0 text-muted">Indirizzo non visualizzabile.</p>');
+
+                visualizzazioneIndirizzo.show();
+                sezioneAggiungiIndirizzo.hide();
+            } else {
+                visualizzazioneIndirizzo.hide();
+                sezioneAggiungiIndirizzo.show();
+            }
+        }
+
+        /**
+         * Esegue una richiesta fetch autenticata con il token di sessione
+         * @param {string} url - L'URL da chiamare
+         * @param {Object} options - Opzioni per la richiesta fetch
+         * @returns {Promise} La promessa della richiesta
+         */
+        function eseguiFetchAutenticato(url, options = {}) {
+            if (!tokenSessione) {
+                console.error("Tentativo di chiamata autenticata senza token.");
+                eseguiLogout();
+                return Promise.reject(new Error('Token non disponibile'));
+            }
+
+            const intestazioni = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${tokenSessione}`,
+                ...options.headers,
+            };
+
+            return fetch(url, {...options, headers: intestazioni})
+                .then(response => {
+                    if (response.status === 401 || response.status === 403) {
+                        console.warn(`Errore di autorizzazione (${response.status}) per ${url}. Effettuo il logout.`);
+                        eseguiLogout();
+                        throw new Error(`Unauthorized: ${response.status}`);
+                    }
+                    if (!response.ok) {
+                        return response.json().catch(() => null).then(corpoErrore => {
+                            const messaggioErrore = corpoErrore?.message || response.statusText || `Errore HTTP: ${response.status}`;
+                            console.error(`Errore nella richiesta a ${url} (${response.status}): ${messaggioErrore}`, corpoErrore);
+                            throw new Error(messaggioErrore);
+                        });
+                    }
+                    if (response.status === 204) {
+                        return null;
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    if (error.message.startsWith('Unauthorized')) {
+                        throw error;
+                    }
+                    console.error(`Errore di rete o fetch per ${url}:`, error);
+                    throw new Error(`Errore di rete o connessione: ${error.message}`);
+                });
+        }
+
+        /**
+         * Formatta una data in formato italiano
+         * @param {string} stringaData - La data in formato stringa
+         * @returns {string} La data formattata o un messaggio di errore
+         */
+        function formattaData(stringaData) {
+            if (!stringaData) return 'Data non disponibile';
+            try {
+                const data = new Date(stringaData);
+                if (isNaN(data.getTime())) {
+                    return 'Data non valida';
+                }
+                return data.toLocaleDateString('it-IT', {year: 'numeric', month: 'long', day: 'numeric'});
+            } catch (e) {
+                console.error("Errore formattazione data:", stringaData, e);
+                return stringaData;
+            }
+        }
+
+        /**
+         * Traduce lo stato dell'ordine dall'inglese all'italiano
+         * @param {string} stato - Lo stato dell'ordine in inglese
+         * @returns {string} Lo stato tradotto in italiano
+         */        function traduciStatoOrdine(stato) {
+            const traduzioni = {
+                'pending': 'In Attesa di Pagamento',
+                'paid': 'Pagato',
+                'processing': 'In Lavorazione',
+                'preparing': 'In Preparazione',
+                'shipped': 'Spedito',
+                'delivered': 'Consegnato',
+                'cancelled': 'Annullato',
+                'refunded': 'Rimborsato'
+            };
+            return traduzioni[stato?.toLowerCase()] || stato;
+        }
+
+        /**
+         * Restituisce la classe CSS del badge per lo stato dell'ordine
+         * @param {string} stato - Lo stato dell'ordine
+         * @returns {string} La classe CSS del badge
+         */        function ottieniClasseBadgeStato(stato) {
+            switch (stato?.toLowerCase()) {
+                case 'pending':
+                    return 'bg-warning';
+                case 'paid':
+                    return 'bg-info';
+                case 'processing':
+                    return 'bg-info';
+                case 'preparing':
+                    return 'bg-primary';
+                case 'shipped':
+                    return 'bg-warning';
+                case 'delivered':
+                    return 'bg-success';
+                case 'cancelled':
+                    return 'bg-danger';
+                case 'refunded':
+                    return 'bg-secondary';
+                default:
+                    return 'bg-dark';
+            }
+        }
+
+        /**
+         * Ottiene il valore di un cookie specifico
+         * @param {string} nomeCookie - Il nome del cookie da cercare
+         * @returns {string|null} Il valore del cookie o null se non trovato
+         */
+        function ottieniCookie(nomeCookie) {
+            const valoreCookie = `; ${document.cookie}`;
+            const partiCookie = valoreCookie.split(`; ${nomeCookie}=`);
+            if (partiCookie.length === 2) return partiCookie.pop().split(';').shift();
+            return null;
+        }
+
+        /**
+         * Esegue il logout dell'utente pulendo i dati e reindirizzando alla pagina di login
+         */
+        function eseguiLogout() {
+            localStorage.removeItem('sessionToken');
+            localStorage.removeItem('userData');
+            document.cookie = 'sessionToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            window.location.href = 'auth/autenticazione.html';
+        }
+
+        /**
+         * Aggiorna il badge del carrello con un ritardo
+         */
+        function aggiornaBadgeCarrelloConDelay() {
+            setTimeout(aggiornaBadgeCarrello, 500);
+        }
+
+        /**
+         * Aggiorna il badge del carrello con il numero di articoli
+         */
+        function aggiornaBadgeCarrello() {
+            try {
+                const carrello = JSON.parse(localStorage.getItem('cart')) || {};
+                let articoliTotali = 0;
+                for (const idProdotto in carrello) {
+                    if (carrello[idProdotto] && typeof carrello[idProdotto].quantity === 'number') {
+                        articoliTotali += carrello[idProdotto].quantity;
+                    }
+                }
+                const elementoBadge = $('#header-placeholder').find('.badge');
+                if (elementoBadge.length) {
+                    elementoBadge.text(articoliTotali);
+                } else {
+                    setTimeout(aggiornaBadgeCarrello, 700);
+                }
+            } catch (e) {
+                console.error("Errore durante l'aggiornamento del badge carrello:", e);
+            }
+        }
+
+    </script>
+</head>
+<body>
+
+<div id="header-placeholder"></div>
+
+<div class="container py-5 mt-4">
+    <div class="row g-4">
+
+        <!-- Sidebar -->
+        <div class="col-12 col-md-3">
+            <div class="sidebar-sticky">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <img
+                            id="user-avatar-sidebar"
+                            src="images/favicon.png"
+                            alt="Avatar utente"
+                            width="60"
+                            height="60"
+                            class="rounded-circle border"
+                    />
+                    <div>
+                        <h5 class="fw-semibold mb-0 fs-6" id="user-name-sidebar">Caricamento...</h5>
+                        <p class="small text-muted mb-0" id="user-email-sidebar"></p>
+                    </div>
+                </div>
+                <hr class="my-3 text-dark text-opacity-50">
+                <nav class="d-flex flex-column gap-3 pt-md-3">
+                    <a href="#ordini" class="btn btn-sidebar">
+                        <i class="bi bi-bag"></i>
+                        <span>Ordini</span>
+                    </a>
+                    <a href="#indirizzo" class="btn btn-sidebar">
+                        <i class="bi bi-geo-alt"></i>
+                        <span>Indirizzo</span>
+                    </a>
+                    <a href="#impostazioni" class="btn btn-sidebar">
+                        <i class="bi bi-gear"></i>
+                        <span>Impostazioni</span>
+                    </a>
+                    <!-- Se artigiano, verrà mostrato un pulsante per accedere alla dashboard -->
+                    <a href="dashboard.html" id="dashboardBtn" class="btn btn-sidebar d-none">
+                        <i class="bi bi-house"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#" id="logout-button" class="btn btn-sidebar-logout">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Logout</span>
+                    </a>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Contenuto -->
+        <div class="col-12 col-md-9">
+            <div class="d-flex flex-column gap-5">
+                <!-- Riepilogo -->
+                <div class="card p-3 pb-2 border border-black border-opacity-10">
+                    <div class="card-header bg-white border-bottom-0">
+                        <h4 class="card-title mb-0 fw-bold" id="account-summary-name">Riepilogo Account</h4>
+                        <p class="card-text text-muted small mb-0 mt-1" id="account-summary-member-since"></p>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col">
+                                <div class="border border-black border-opacity-10 rounded p-3 text-center">
+                                    <p class="text-muted small mb-1">Ordini totali</p>
+                                    <p class="fs-4 fw-bold mb-0" id="total-orders-summary">0</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ordini -->
+                <div id="ordini">
+                    <h2 class="fs-4 fw-bold mb-4">I tuoi Ordini</h2>
+                    <div id="orders-loading" class="text-center my-5" style="display: none;">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Caricamento ordini...</span>
+                        </div>
+                    </div>
+                    <div id="order-list-container">
+                        <!-- Ordini caricati qui -->
+                    </div>
+                    <div id="no-orders-message" class="card" style="display: none;">
+                        <div class="card-body p-4 text-center">
+                            <p class="mb-3">Non hai ancora effettuato ordini.</p>
+                            <a href="index.html" class="btn btn-dark">Inizia a fare acquisti</a>
+                        </div>
+                    </div>
+                    <!-- Template Ordine (nascosto) -->
+                    <div class="card mb-4 border border-black border-opacity-10" id="order-template"
+                         style="display: none;">
+                        <div class="card-body p-4">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <h6 class="fw-semibold mb-0 order-id">Ordine #...</h6>
+                                        <span class="badge order-status">...</span>
+                                    </div>
+                                    <p class="text-muted small mb-0 order-date">...</p>
+                                </div>
+                                <div class="d-flex align-items-center gap-3 flex-shrink-0">
+                                    <p class="fw-bold mb-0 order-total">€...</p>
+                                    <a href="#"
+                                       class="btn btn-sm btn-outline-dark border-dark border-opacity-25 order-details-link">Dettagli</a>
+                                </div>
+                            </div>
+                            <hr class="my-3 text-dark text-opacity-50">
+                            <div class="d-flex align-items-center gap-3 order-product-preview" style="display: none;">
+                                <!-- Nascosto di default -->
+                                <div class="d-flex align-items-center gap-2">
+                                    <img src="images/favicon.png" alt="Anteprima prodotto" width="40" height="40"
+                                         class="rounded product-image-preview"/>
+                                    <span class="small product-name-preview">...</span>
+                                    <span class="small text-muted product-more-preview" style="display: none;"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Indirizzo -->
+                <div id="indirizzo">
+                    <h2 class="fs-4 fw-bold mb-4">Indirizzo di Spedizione Predefinito</h2>
+                    <div class="row row-cols-1 row-cols-md-2 g-4">
+                        <!-- Card Indirizzo Esistente (nascosta inizialmente) -->
+                        <div class="col" id="address-display-card" style="display: none;">
+                            <div class="card h-100 border border-black border-opacity-10">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <h6 class="fw-bold mb-0">Indirizzo Principale</h6>
+                                                <span class="badge border border-secondary text-secondary">Predefinito</span>
+                                            </div>
+                                            <div class="small space-y-1 address-content">
+                                                <!-- Caricato da JS -->
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2 flex-shrink-0">
+                                            <button id="edit-address-button"
+                                                    class="btn btn-sm btn-outline-dark border-dark border-opacity-25"
+                                                    data-bs-toggle="modal" data-bs-target="#addressModal">
+                                                Modifica
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Card Aggiungi Indirizzo (nascosta inizialmente) -->
+                        <div class="col" id="add-address-card" style="display: none;">
+                            <div class="card card-dashed h-100 border border-black border-opacity-10">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-center">
+                                    <button id="add-address-button"
+                                            class="btn btn-outline-dark border-dark border-opacity-25"
+                                            data-bs-toggle="modal" data-bs-target="#addressModal">
+                                        + Aggiungi indirizzo
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Impostazioni -->
+                <div id="impostazioni">
+                    <h2 class="fs-4 fw-bold mb-4">Impostazioni account</h2>
+                    <div class="card border border-black border-opacity-10">
+                        <div class="card-body p-4">
+                            <ul class="nav nav-tabs mb-4" id="accountSettingsTab" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link text-dark active" id="profilo-tab" data-bs-toggle="tab"
+                                            data-bs-target="#profilo-tab-pane" type="button" role="tab"
+                                            aria-controls="profilo-tab-pane" aria-selected="true">Profilo
+                                    </button>
+                                </li>
+                                <!--<li class="nav-item" role="presentation">
+                                    <button class="nav-link text-dark" id="password-tab" data-bs-toggle="tab"
+                                            data-bs-target="#password-tab-pane" type="button" role="tab"
+                                            aria-controls="password-tab-pane" aria-selected="false">Password
+                                    </button>
+                                </li>-->
+                            </ul>
+                            <div class="tab-content" id="accountSettingsTabContent">
+                                <div class="tab-pane fade show active" id="profilo-tab-pane" role="tabpanel"
+                                     aria-labelledby="profilo-tab" tabindex="0">
+                                    <p class="text-muted mb-3">
+                                        Gestisci preferenze e impostazioni del tuo profilo.
+                                    </p>
+                                    <button id="edit-profile-button" class="btn btn-dark">Modifica profilo</button>
+                                </div>
+                                <!--<div class="tab-pane fade" id="password-tab-pane" role="tabpanel"
+                                     aria-labelledby="password-tab" tabindex="0">
+                                    <p class="text-muted mb-3">
+                                        Cambia password per mantenere sicuro il tuo account.
+                                    </p>
+                                    <button id="change-password-button" class="btn btn-dark">Cambia password</button>
+                                </div>-->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Aggiungi/Modifica Indirizzo -->
+<div class="modal fade" id="addressModal" tabindex="-1" aria-labelledby="addressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="addressForm">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="addressModalLabel">Aggiungi Indirizzo di Spedizione</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="address-modal-feedback" class="mb-3"></div>
+                    <div class="mb-3">
+                        <label for="address-text" class="form-label">Indirizzo Completo</label>
+                        <textarea class="form-control" id="address-text" rows="5" required placeholder="Es:
+Mario Rossi
+Via Roma, 123
+20100 Milano MI
+Italia">
+                        </textarea>
+                        <div class="form-text">Inserisci l'indirizzo completo su più righe.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <div class="row justify-content-between w-100 g-1">
+                        <div class="col-6 ps-0">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6 pe-0">
+                            <button type="submit" class="btn btn-dark w-100" id="save-address-button">
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"
+                                      style="display: none;"></span>
+                                Salva Indirizzo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modale modifica profilo -->
+<div class="modal fade" id="editProfileModal" tabindex="-1" aria-labelledby="editProfileModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title" id="editProfileModalLabel">Modifica Profilo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="edit-profile-modal-feedback" class="mb-3"></div>
+                <div class="mb-3">
+                    <label for="edit-profile-name" class="form-label">Nome Completo</label>
+                    <input type="text" class="form-control" id="edit-profile-name" required
+                           placeholder="Mario Rossi">
+                    <div class="form-text">Inserisci il tuo nome completo.</div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0">
+                <div class="row justify-content-between w-100 g-1">
+                    <div class="col-6 ps-0">
+                        <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                        </button>
+                    </div>
+                    <div class="col-6 pe-0">
+                        <button type="button" id="save-profile-button" class="btn btn-dark w-100">
+                            Salva Modifiche
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
+        crossorigin="anonymous"></script>
+<script src="js/headerfooterloader.js"></script>
+</body>
+</html>
