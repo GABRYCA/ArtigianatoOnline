@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Artigianato Online</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="images/favicon.png">
+
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link type="text/css" rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script>
+        const urlBaseApi = "";
+        const idArtigiano = new URLSearchParams(window.location.search).get('artisanId');
+        let elencoCategorie = ["Caricando..."];
+        let elencoProdotti = [];
+        let numeroPaginaCorrente = 1;
+        let numeroPagineTotali = 1;
+        let filtriApplicati = {};
+
+        $(document).ready(function () {
+
+            caricaCategorie();
+            caricaProdotti(1, {artisanId: idArtigiano});
+            inizializzaInterfacciaFiltri();
+            inizializzaGestoriEventi();
+        });
+
+        /**
+         * Carica le categorie dal backend e le visualizza nei filtri
+         */
+        function caricaCategorie() {
+            $.ajax({
+                url: urlBaseApi + "/api/categories",
+                type: "GET",
+                dataType: "json",
+                success: function (dati) {
+                    elencoCategorie = dati;
+                    elencoCategorie.forEach(function (categoria) {
+                        const htmlCategoria = `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="${categoria.name + '-' + categoria.category_id}" name="category" value="${categoria.id}">
+                        <label class="form-check-label" for="${categoria.name}">${categoria.name}</label>
+                    </div>
+                `;
+                        $("#categorie").append(htmlCategoria);
+                    });
+                },
+                error: function (xhr, status, errore) {
+                    console.error("Errore durante il caricamento delle categorie:", errore);
+                }
+            });
+        }
+
+        /**
+         * Inizializza l'interfaccia dei filtri mobile/desktop
+         */
+        function inizializzaInterfacciaFiltri() {
+            $("#mobileFilterToggle").click(function (evento) {
+                evento.stopPropagation();
+                $("#filterSection").toggleClass("d-none d-block");
+            });
+
+            $(document).click(function (evento) {
+                if (!$(evento.target).closest("#filterSection").length &&
+                    !$(evento.target).is("#mobileFilterToggle") &&
+                    $("#filterSection").hasClass("d-block") &&
+                    window.innerWidth < 992) {
+                    $("#filterSection").removeClass("d-block").addClass("d-none");
+                }
+            });
+
+            $(window).resize(function () {
+                if (window.innerWidth >= 992) {
+                    $("#filterSection").removeClass("d-none d-block").addClass("d-lg-block");
+                } else {
+                    if (!$("#filterSection").hasClass("d-block")) {
+                        $("#filterSection").addClass("d-none").removeClass("d-lg-block");
+                    }
+                }
+            });
+
+            if (window.innerWidth >= 992) {
+                $("#filterSection").addClass("d-lg-block");
+            }
+        }
+
+        /**
+         * Inizializza tutti i gestori di eventi
+         */
+        function inizializzaGestoriEventi() {
+            inizializzaSliderPrezzo();
+            inizializzaCarrello();
+            inizializzaCampiPrezzo();
+            inizializzaOrdinamento();
+            inizializzaFormFiltri();
+            inizializzaRicerca();
+        }
+
+        /**
+         * Inizializza lo slider del prezzo
+         */
+        function inizializzaSliderPrezzo() {
+            const sliderPrezzo = document.getElementById("prezzoRange");
+            sliderPrezzo.addEventListener("input", function () {
+                const prezzoMinimo = sliderPrezzo.min;
+                const prezzoMassimo = sliderPrezzo.max;
+                const valoreCorrente = sliderPrezzo.value;
+                const testoRange = document.getElementById("rangeSelezionato");
+                testoRange.textContent = `€${prezzoMinimo} - €${valoreCorrente}`;
+                const inputPrezzoMax = document.getElementById("maxPrice");
+                inputPrezzoMax.value = valoreCorrente;
+            });
+        }
+
+        /**
+         * Inizializza la gestione del carrello
+         */
+        function inizializzaCarrello() {
+            setTimeout(aggiornaContatoreBadgeCarrello, 500);
+
+            $("#prodotti").on("click", ".add-to-cart-btn", function () {
+                const idProdotto = $(this).data("product-id");
+                const prodotto = elencoProdotti.find(p => p.product_id === idProdotto);
+
+                if (!prodotto) {
+                    console.error("Dettagli non trovati per il prodotto con ID:", idProdotto);
+                    return;
+                }
+
+                if (prodotto.is_active && prodotto.stock_quantity > 0) {
+                    prodotto.stock_quantity -= 1;
+                } else {
+                    alert("Prodotto non disponibile");
+                    return;
+                }
+
+                let carrello = JSON.parse(localStorage.getItem('cart')) || {};
+
+                if (carrello[idProdotto]) {
+                    carrello[idProdotto].quantity += 1;
+                } else {
+                    carrello[idProdotto] = {
+                        id: prodotto.product_id,
+                        name: prodotto.name,
+                        price: parseFloat(prodotto.price),
+                        image_url: prodotto.image_url,
+                        artisan_shop_name: prodotto.artisan_shop_name,
+                        quantity: 1
+                    };
+                }
+
+                localStorage.setItem('cart', JSON.stringify(carrello));
+                aggiornaContatoreBadgeCarrello();
+
+                $(this).html('<i class="bi bi-check-lg me-2 me-md-3"></i> Aggiunto al carrello!').prop('disabled', true);
+                setTimeout(() => {
+                    $(this).html('<i class="bi bi-cart-plus me-2 me-md-3"></i> Aggiungi al carrello').prop('disabled', false);
+                }, 1500);
+            });
+        }
+
+        /**
+         * Aggiorna il contatore del badge del carrello nell'header
+         */
+        function aggiornaContatoreBadgeCarrello() {
+            const carrello = JSON.parse(localStorage.getItem('cart')) || {};
+            let totaleArticoli = 0;
+            for (const idProdotto in carrello) {
+                totaleArticoli += carrello[idProdotto].quantity;
+            }
+            $('#header-placeholder').find('.badge').text(totaleArticoli);
+        }
+
+        /**
+         * Inizializza la sincronizzazione dei campi di prezzo con lo slider
+         */
+        function inizializzaCampiPrezzo() {
+            $("#minPrice").on("input", function () {
+                const prezzoMinimo = parseInt($(this).val()) || 0;
+                const prezzoMassimo = parseInt($("#maxPrice").val()) || 1000;
+
+                if (prezzoMinimo <= prezzoMassimo) {
+                    $("#rangeSelezionato").text(`€${prezzoMinimo} - €${prezzoMassimo}`);
+                }
+            });
+
+            $("#maxPrice").on("input", function () {
+                const prezzoMinimo = parseInt($("#minPrice").val()) || 0;
+                const prezzoMassimo = parseInt($(this).val()) || 1000;
+
+                if (prezzoMassimo >= prezzoMinimo) {
+                    $("#rangeSelezionato").text(`€${prezzoMinimo} - €${prezzoMassimo}`);
+                    $("#prezzoRange").val(prezzoMassimo);
+                }
+            });
+        }
+
+        /**
+         * Inizializza la gestione dell'ordinamento
+         */
+        function inizializzaOrdinamento() {
+            $("#sortBy").change(function () {
+                filtriApplicati.sortBy = $(this).val();
+                caricaProdotti(1, filtriApplicati);
+            });
+        }
+
+        /**
+         * Inizializza il form dei filtri
+         */
+        function inizializzaFormFiltri() {
+            $("#filtersForm").submit(function (evento) {
+                evento.preventDefault();
+
+                const checkboxCategorie = $('input[name="category"]:checked');
+                const categorieSelezionate = [];
+                checkboxCategorie.each(function () {
+                    const idCategoria = $(this).attr("id").split("-")[1];
+                    categorieSelezionate.push(idCategoria);
+                });
+
+                const prezzoMinimo = $("#minPrice").val() || 0;
+                const prezzoMassimo = $("#maxPrice").val() || 1000;
+                const soloDisponibili = $("#inStockCheck").is(":checked");
+
+                filtriApplicati = {
+                    categories: categorieSelezionate.length > 0 ? categorieSelezionate : [],
+                    minPrice: prezzoMinimo,
+                    maxPrice: prezzoMassimo,
+                    inStock: soloDisponibili,
+                    sortBy: $("#sortBy").val()
+                };
+
+                caricaProdotti(1, filtriApplicati);
+            });
+        }
+
+        /**
+         * Inizializza la funzionalità di ricerca
+         */
+        function inizializzaRicerca() {
+            $("#searchForm").submit(function (evento) {
+                evento.preventDefault();
+                const termineRicerca = $("#searchInput").val().trim();
+
+                filtriApplicati.q = termineRicerca || null;
+                caricaProdotti(1, filtriApplicati);
+            });
+
+            $("#searchInput").on("input", function () {
+                if ($(this).val().trim() === "") {
+                    if (filtriApplicati.q) {
+                        delete filtriApplicati.q;
+                        caricaProdotti(1, filtriApplicati);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Carica i prodotti dal backend con paginazione e filtri
+         * @param {number} numeroPagina - Numero della pagina da caricare
+         * @param {Object} filtri - Oggetto contenente i filtri da applicare
+         */
+        function caricaProdotti(numeroPagina = 1, filtri = {}) {
+            if (numeroPagina === 1) {
+                $("#prodotti").empty();
+                $("#prodotti").append('<div class="col-12 text-center my-5"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>');
+            }
+
+            let urlCompleto = costruisciUrlApi(numeroPagina, filtri);
+
+            $.ajax({
+                url: urlCompleto,
+                type: "GET",
+                dataType: "json",
+                success: function (dati) {
+                    if (numeroPagina === 1) $("#prodotti").empty();
+
+                    elencoProdotti = numeroPagina === 1 ? dati.products : [...elencoProdotti, ...dati.products];
+                    numeroPaginaCorrente = dati.currentPage;
+                    numeroPagineTotali = dati.totalPages;
+
+                    let prodottiTrovati = dati.products;
+
+                    if (prodottiTrovati.length === 0 && numeroPagina === 1) {
+                        $("#prodotti").html('<div class="col-12 text-center">Nessun prodotto trovato con i filtri selezionati.</div>');
+                    } else {
+                        prodottiTrovati.forEach(function (prodotto) {
+                            const htmlProdotto = creaProdottoHtml(prodotto);
+                            $("#prodotti").append(htmlProdotto);
+                        });
+                    }
+
+                    gestisciPulsanteCaricaAltri();
+                },
+                error: function (xhr, status, errore) {
+                    console.error("Errore durante il caricamento dei prodotti:", errore);
+                    if (numeroPagina === 1) $("#prodotti").empty();
+                    $("#prodotti").append('<div class="col-12 text-center text-danger">Si è verificato un errore durante il caricamento dei prodotti. Riprova più tardi.</div>');
+                    $("#load-more-container").remove();
+                }
+            });
+        }
+
+        /**
+         * Crea l'HTML per un singolo prodotto
+         * @param {Object} prodotto - Oggetto prodotto dal backend
+         * @returns {string} HTML del prodotto
+         */
+        function creaProdottoHtml(prodotto) {
+            const disponibile = prodotto.is_active && prodotto.stock_quantity > 0;
+            const iconaBottone = disponibile ? 'bi-cart-plus' : 'bi-cart-x';
+            const testoBottone = disponibile ? 'Aggiungi al carrello' : 'Prodotto esaurito';
+            const statoBottone = disponibile ? '' : 'disabled';
+
+            return `
+                <div class="col-12 col-lg-4 mb-3">
+                   <div class="card h-100 shadow-sm">
+                       <a href="prodotto.html?id=${prodotto.product_id}" class="text-decoration-none text-dark">
+                          <img src="${prodotto.image_url}" class="card-img-top" alt="${prodotto.name}">
+                       </a>
+                        <div class="card-body pt-4 d-flex flex-column">
+                            <a href="prodotto.html?id=${prodotto.product_id}" class="text-decoration-none text-dark">
+                            <h5 class="card-title fs-6 fw-bold">${prodotto.name}</h5>
+                            <p class="card-text text-muted lh-sm flex-grow-1">${prodotto.description}</p>
+                            <p class="card-text pb-2"><strong>€${prodotto.price}</strong></p>
+                            </a>
+                            <button class="btn btn-dark w-100 add-to-cart-btn mt-auto" data-product-id="${prodotto.product_id}" ${statoBottone}>
+                                <i class="bi ${iconaBottone} me-2 me-md-3"></i>
+                                ${testoBottone}
+                            </button>
+                        </div>
+                     </div>
+                </div>
+             `;
+        }
+
+        /**
+         * Gestisce la visualizzazione del pulsante "Carica altri prodotti"
+         */
+        function gestisciPulsanteCaricaAltri() {
+            $("#load-more-container").remove();
+            if (numeroPaginaCorrente < numeroPagineTotali) {
+                const htmlCaricaAltro = `
+                    <div id="load-more-container" class="row mt-4 mb-5">
+                        <div class="col-12 text-center">
+                            <button id="load-more-btn" class="btn btn-outline-dark">Carica altri prodotti</button>
+                        </div>
+                    </div>
+                `;
+                $("#prodotti").parent().after(htmlCaricaAltro);
+
+                $("#load-more-btn").click(function () {
+                    $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Caricamento...');
+                    caricaProdotti(numeroPaginaCorrente + 1, filtriApplicati);
+                });
+            }
+        }
+
+        /**
+         * Costruisce l'URL per l'API con i parametri di filtro
+         * @param {number} numeroPagina - Numero della pagina
+         * @param {Object} filtri - Oggetto filtri
+         * @returns {string} URL completo per l'API
+         */
+        function costruisciUrlApi(numeroPagina, filtri) {
+            let urlCompleto = `${urlBaseApi}/api/products?page=${numeroPagina}`;
+
+            if (filtri.categories && filtri.categories.length > 0) {
+                filtri.categories.forEach(idCategoria => {
+                    urlCompleto += `&category=${idCategoria}`;
+                });
+            }
+
+            if (filtri.minPrice) urlCompleto += `&minPrice=${filtri.minPrice}`;
+            if (filtri.maxPrice) urlCompleto += `&maxPrice=${filtri.maxPrice}`;
+            if (filtri.inStock !== undefined) urlCompleto += `&inStock=${filtri.inStock}`;
+            if (filtri.artisanId && filtri.artisanId !== "null") urlCompleto += `&artisanId=${filtri.artisanId}`;
+            if (filtri.q) urlCompleto += `&q=${filtri.q}`;
+            if (filtri.sortBy) urlCompleto += `&sortBy=${filtri.sortBy}`;
+
+            return urlCompleto;
+        }
+    </script>
+</head>
+<body style="padding-top: 55px;">
+<!-- Header - definito in common/header.html -->
+<div id="header-placeholder"></div>
+
+<div class="container-fluid">
+
+    <!-- Hero -->
+    <div class="row bg-slightly-dark py-5 justify-content-center">
+        <div class="col-12">
+            <p class="h1 fw-bolder text-center">Scopri l'artigianato italiano</p>
+        </div>
+        <div class="col-12 mt-3">
+            <p class="text-center text-break lh-sm text-description-hero mx-auto">Prodotti unici realizzati a mano dai
+                migliori artigiani italiani. Ogni pezzo racconta una storia di passione e tradizione.</p>
+        </div>
+
+        <div class="col-12 mt-3">
+            <form class="d-flex justify-content-center" id="searchForm">
+                <input class="form-control me-2 search-hero-form" type="search" placeholder="Cosa stai cercando?"
+                       aria-label="Search" id="searchInput">
+                <button class="btn btn-dark py-2" type="submit">Cerca</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="container-xxl mt-4">
+        <div class="row">
+
+            <!-- Filtri -->
+
+            <!-- Filtri - Mobile -->
+            <div class="d-lg-none mb-3">
+                <div class="row justify-content-between">
+                    <div class="col-auto">
+                        <p class="fs-5 text-start fw-bold mb-4">Filtri</p>
+                    </div>
+                    <div class="col-auto">
+                        <button id="mobileFilterToggle" class="btn btn-outline-dark border-dark border-opacity-25"
+                                type="button">
+                            <i class="bi bi-funnel me-2"></i>Filtri
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fitri - Desktop -->
+            <div id="filterSection" class="col-lg-3 d-none">
+                <p class="fs-5 text-start fw-bold mb-4">Filtri</p>
+
+                <!-- Categorie -->
+                <form id="filtersForm" class="filters-form">
+                    <div class="row border-bottom-1">
+                        <div class="col-12">
+                            <a class="text-decoration-none text-dark" data-bs-toggle="collapse" href="#categorie"
+                               role="button" aria-expanded="false" aria-controls="categorie">
+                                <div class="row justify-content-between">
+                                    <div class="col-auto">
+                                        <p class="fs-6 text-start fw-semibold w-100">Categorie</p>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="bi-chevron-down text-end"></i>
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="collapse show" id="categorie">
+                                <!-- Categorie (caricate con jQuery) -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Prezzo -->
+                    <div class="row border-bottom-1 mt-3">
+                        <div class="col-12">
+                            <a class="text-decoration-none text-dark" data-bs-toggle="collapse" href="#prezzo"
+                               role="button" aria-expanded="false" aria-controls="prezzo">
+                                <div class="row justify-content-between">
+                                    <div class="col-auto">
+                                        <p class="fs-6 text-start fw-semibold w-100">Prezzo</p>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="bi-chevron-down text-end"></i>
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="collapse show" id="prezzo">
+                                <div class="row mt-2">
+                                    <div class="col-12">
+                                        <label class="d-flex justify-content-between text-black text-opacity-75"
+                                               for="prezzoRange">
+                                            <span class="fs-6 text-start fw-semibold w-100">€0</span>
+                                            <span class="fs-6 text-end fw-semibold w-100">€1000</span>
+                                        </label>
+                                        <input type="range" class="form-range" min="0" max="1000" step="10"
+                                               id="prezzoRange">
+                                        <span class="small">Range: <span id="rangeSelezionato">€0 - €500</span></span>
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-6">
+                                        <label class="form-label" for="minPrice">Min</label>
+                                        <input type="number" class="form-control" id="minPrice" placeholder="0">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" for="maxPrice">Max</label>
+                                        <input type="number" class="form-control" id="maxPrice" placeholder="500">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- In stock -->
+                    <div class="row border-bottom-1 mt-3">
+                        <div class="col-12">
+                            <a class="text-decoration-none text-dark" data-bs-toggle="collapse" href="#inStock"
+                               role="button" aria-expanded="false" aria-controls="inStock">
+                                <div class="row justify-content-between">
+                                    <div class="col-auto">
+                                        <p class="fs-6 text-start fw-semibold w-100">Disponibilità</p>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="bi-chevron-down text-end"></i>
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="collapse" id="inStock">
+                                <div class="row pb-3">
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="inStockCheck"
+                                                   name="inStock" value="inStock" checked>
+                                            <label class="form-check-label" for="inStockCheck">Disponibile</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Invio -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-dark w-100">Applica filtri</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+
+            <!-- Prodotti -->
+            <div class="col-12 col-lg-9 ps-md-4">
+                <div class="row gy-lg-2 gy-0 justify-content-center justify-content-lg-between">
+                    <div class="col-auto">
+                        <p class="fs-4 text-start fw-bold mb-4">Prodotti in evidenza</p>
+                    </div>
+                    <div class="col-auto">
+                        <!-- ordina per -->
+                        <div class="row justify-content-around">
+                            <label class="col-3 col-md-auto col-form-label fs-6 text-start fw-light my-auto"
+                                   for="sortBy">Ordina
+                                per:</label>
+                            <div class="col-auto my-auto">
+                                <select class="form-select py-1" name="sortBy" id="sortBy">
+                                    <option value="created_at_desc" selected>In evidenza</option>
+                                    <option value="price_asc">Prezzo crescente</option>
+                                    <option value="price_desc">Prezzo decrescente</option>
+                                    <option value="created_at_desc">Più recenti</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row" id="prodotti">
+                    <!-- Prodotti (caricati con jQuery) -->
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+<!-- Bootstra e Footer - definito in common/footer.html -->
+<div id="footer-placeholder"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
+        crossorigin="anonymous"></script>
+<script src="js/headerfooterloader.js"></script>
+</body>
+</html>

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dettagli Ordine - Artigianato Online</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="../images/favicon.png">
+
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link type="text/css" rel="stylesheet" href="../css/style.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script>
+        const urlBaseApi = "";
+
+        $(document).ready(function () {
+            const parametriUrl = new URLSearchParams(window.location.search);
+            const idOrdine = parametriUrl.get('id');
+            const tokenAutenticazione = localStorage.getItem('sessionToken');
+
+            if (!idOrdine) {
+                $('.container').html('<div class="alert alert-danger">ID ordine non specificato nell\'URL. Aggiungi ?id=NUMERO_ORDINE</div>').show();
+                $('#indicatore-caricamento').hide();
+                return;
+            }
+
+            if (!tokenAutenticazione) {
+                $('.container').html('<div class="alert alert-warning">Accesso non autorizzato. Per favore, <a href="/login.html">effettua il login</a> per visualizzare i tuoi ordini.</div>').show();
+                $('#indicatore-caricamento').hide();
+                return;
+            }
+
+            recuperaDatiOrdine(idOrdine, tokenAutenticazione);
+        });
+
+        /**
+         * Mostra o nasconde l'indicatore di caricamento
+         * @param {boolean} inCaricamento - Se true mostra il caricamento, se false lo nasconde
+         */
+        function mostraStatoCaricamento(inCaricamento) {
+            const contenutoPagina = $('#order-content');
+            const indicatoreCaricamento = $('#indicatore-caricamento');
+            if (inCaricamento) {
+                contenutoPagina.hide();
+                indicatoreCaricamento.show();
+            } else {
+                indicatoreCaricamento.hide();
+                contenutoPagina.show();
+            }
+        }
+
+        /**
+         * Gestisce gli errori delle chiamate API
+         * @param {Object} rispostaHttp - Oggetto risposta HTTP jQuery
+         * @param {string} testoStato - Testo dello stato della richiesta
+         * @param {string} errore - Messaggio di errore
+         * @param {string} idOrdine - ID dell'ordine per cui si è verificato l'errore
+         */
+        function gestisciErroreApi(rispostaHttp, testoStato, errore, idOrdine) {
+            mostraStatoCaricamento(false);
+            console.error("Errore API:", rispostaHttp.status, rispostaHttp.responseText, testoStato, errore);
+            let messaggioErrore = `Errore nel caricamento dell'ordine (ID: ${idOrdine}). Si è verificato un problema imprevisto.`;
+            if (rispostaHttp.status === 404) {
+                messaggioErrore = `Ordine con ID ${idOrdine} non trovato. Verifica l'ID e riprova.`;
+            } else if (rispostaHttp.status === 401) {
+                messaggioErrore = `Accesso non autorizzato. Effettua il login per visualizzare questo ordine.`;
+            } else if (rispostaHttp.status === 403) {
+                messaggioErrore = `Non hai i permessi necessari per visualizzare l'ordine ${idOrdine}.`;
+            } else if (rispostaHttp.status >= 500) {
+                messaggioErrore = `Errore del server durante il caricamento dell'ordine ${idOrdine}. Riprova più tardi o contatta l'assistenza.`;
+            }
+            $('.container').html(`<div class="alert alert-danger">${messaggioErrore}</div>`);
+        }
+
+        /**
+         * Recupera i dati dell'ordine tramite API
+         * @param {string} idOrdine - ID dell'ordine da recuperare
+         * @param {string} token - Token di autenticazione
+         */
+        function recuperaDatiOrdine(idOrdine, token) {
+            mostraStatoCaricamento(true);
+
+            $.ajax({
+                url: `${urlBaseApi}/api/orders/${idOrdine}`,
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                success: function (datiGrezzi) {
+                    if (!datiGrezzi) {
+                        mostraStatoCaricamento(false);
+                        $('.container').html(`<div class="alert alert-warning">Risposta API non valida o vuota per l'ordine ${idOrdine}.</div>`);
+                        return;
+                    }
+                    try {
+                        const datiOrdineElaborati = mappaDatiOrdine(datiGrezzi);
+                        popolaPagina(datiOrdineElaborati);
+                        mostraStatoCaricamento(false);
+                    } catch (erroreElaborazione) {
+                        mostraStatoCaricamento(false);
+                        console.error("Errore durante la mappatura o popolamento:", erroreElaborazione);
+                        $('.container').html(`<div class="alert alert-danger">Errore nell'elaborazione dei dati dell'ordine.</div>`);
+                    }
+                },
+                error: function (rispostaHttp, testoStato, errore) {
+                    gestisciErroreApi(rispostaHttp, testoStato, errore, idOrdine);
+                }
+            });
+        }
+
+        /**
+         * Mappa i dati grezzi dell'ordine in un formato strutturato per la visualizzazione
+         * @param {Object} datiGrezzi - Dati grezzi ricevuti dall'API
+         * @returns {Object} Dati dell'ordine mappati e formattati
+         */        function mappaDatiOrdine(datiGrezzi) {
+            const mappaStati = {
+                pending: {text: "In Attesa di Pagamento", progress: 10, icon: 'bi-hourglass-split', color: 'warning'},
+                paid: {text: "Pagato", progress: 20, icon: 'bi-credit-card', color: 'info'},
+                processing: {text: "In Lavorazione", progress: 40, icon: 'bi-gear', color: 'info'},
+                preparing: {text: "In Preparazione", progress: 60, icon: 'bi-box-seam', color: 'primary'},
+                shipped: {text: "Spedito", progress: 80, icon: 'bi-truck', color: 'warning'},
+                delivered: {text: "Consegnato", progress: 100, icon: 'bi-check-circle-fill', color: 'success'},
+                cancelled: {text: "Annullato", progress: 0, icon: 'bi-x-circle-fill', color: 'danger'},
+                refunded: {text: "Rimborsato", progress: 0, icon: 'bi-arrow-counterclockwise', color: 'secondary'},
+                default: {text: datiGrezzi.status, progress: 50, icon: 'bi-question-circle', color: 'secondary'}
+            };
+            const infoStatoCorrente = mappaStati[datiGrezzi.status] || mappaStati.default;
+            const mappaStatiPagamento = {
+                pending: {text: 'In attesa', color: 'warning'},
+                completed: {text: 'Completato', color: 'success'},
+                failed: {text: 'Fallito', color: 'danger'},
+                refunded: {text: 'Rimborsato', color: 'info'},
+                default: {text: datiGrezzi.payment?.status || 'N/D', color: 'muted'}
+            };
+            const infoStatoPagamento = datiGrezzi.payment ? (mappaStatiPagamento[datiGrezzi.payment.status] || mappaStatiPagamento.default) : mappaStatiPagamento.default;
+
+            const mappaMetodiPagamento = {
+                credit_card: 'Carta di Credito',
+                paypal: 'PayPal',
+                bank_transfer: 'Bonifico Bancario',
+                other: 'Altro',
+                default: datiGrezzi.payment?.payment_method || 'N/D'
+            };
+            const testoMetodoPagamento = datiGrezzi.payment ? (mappaMetodiPagamento[datiGrezzi.payment.payment_method] || mappaMetodiPagamento.default) : mappaMetodiPagamento.default;
+
+
+            return {
+                id: datiGrezzi.order_id,
+                date: formattaData(datiGrezzi.order_date),
+                status: infoStatoCorrente.text,
+                statusColor: infoStatoCorrente.color,
+                statusIcon: infoStatoCorrente.icon,
+                progress: infoStatoCorrente.progress,
+                lastUpdate: formattaData(datiGrezzi.updated_at, true),
+                items: datiGrezzi.items.map(articolo => ({
+                    id: articolo.product_id,
+                    name: articolo.product_name,
+                    price: articolo.price_per_unit,
+                    quantity: articolo.quantity,
+                    image: articolo.product_image_url || '../images/favicon.png',
+                    artisan: articolo.artisan_shop_name || `Artigiano ID: ${articolo.artisan_id}`,
+                    sku: articolo.product_sku || 'N/D'
+                })), shipping: {
+                    method: traduciMetodoSpedizione(datiGrezzi.shipping_method),
+                    address: datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito'],
+                    trackingNumber: datiGrezzi.tracking_number || 'Non disponibile',
+                },
+                billing: {
+                    address: datiGrezzi.billing_address ? datiGrezzi.billing_address.split(',').map(p => p.trim()) : (datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito']),
+                },
+                payment: {
+                    total: datiGrezzi.total_amount,
+                    status: infoStatoPagamento.text,
+                    statusColor: infoStatoPagamento.color,
+                    method: testoMetodoPagamento,
+                },
+                customer: {
+                    name: datiGrezzi.customer_full_name || `Cliente ID: ${datiGrezzi.customer_id}`,
+                    email: datiGrezzi.customer_email || 'Email non disponibile'
+                }
+            };
+        }
+
+        /**
+         * Popola la pagina con i dati dell'ordine
+         * @param {Object} datiOrdine - Oggetto contenente tutti i dati dell'ordine formattati
+         */
+        function popolaPagina(datiOrdine) {
+            $('#order-id-title').text(datiOrdine.id);
+            $('#order-date-header').text(datiOrdine.date);
+
+            const badgeStato = $('#order-status-badge');
+            badgeStato.text(datiOrdine.status).removeClass().addClass(`badge fs-6 bg-${datiOrdine.statusColor}`);
+            $('#order-progress-bar').css('width', datiOrdine.progress + '%').removeClass().addClass(`progress-bar bg-${datiOrdine.statusColor}`);
+            const iconaStato = $('#status-icon-current');
+            iconaStato.removeClass().addClass(`status-icon border-${datiOrdine.statusColor} text-${datiOrdine.statusColor}`);
+            if (datiOrdine.progress === 100 || datiOrdine.status === 'Annullato' || datiOrdine.status === 'Rimborsato') {
+                iconaStato.removeClass(`text-${datiOrdine.statusColor}`).addClass(`bg-${datiOrdine.statusColor} text-white completed`);
+                $('#status-icon-current i').removeClass().addClass(`bi ${datiOrdine.statusIcon}`);
+            } else {
+                $('#status-icon-current i').removeClass().addClass(`bi ${datiOrdine.statusIcon}`);
+            }
+            $('#status-text-current').text(datiOrdine.status);
+            $('#status-date-current').text(datiOrdine.lastUpdate);
+
+
+            const contenitoreArticoli = $('#order-items-container');
+            contenitoreArticoli.empty();
+            if (datiOrdine.items && datiOrdine.items.length > 0) {
+                datiOrdine.items.forEach(articolo => {
+                    const htmlArticolo = `
+                    <div class="d-flex gap-3 align-items-start">
+                         <img src="${articolo.image}" alt="${articolo.name}" class="rounded immagine-prodotto-ordini" onerror="this.onerror=null; this.src='../images/placeholder-image.png';">
+                        <div class="flex-grow-1 my-auto">
+                            <a href="../prodotto.html?id=${articolo.id}" class="fw-bold text-decoration-none link-dark">${articolo.name}</a>
+                            <p class="text-muted small mb-1">Artigiano: ${articolo.artisan}</p>
+                            <p class="text-muted small mb-1">SKU: ${articolo.sku}</p>
+                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                <span class="small">Quantità: ${articolo.quantity}</span>
+                                <span class="fw-bold">€ ${articolo.price}</span>
+                            </div>
+                        </div>
+                    </div>
+                    ${datiOrdine.items.indexOf(articolo) < datiOrdine.items.length - 1 ? '<hr class="my-3">' : ''}
+                `;
+                    contenitoreArticoli.append(htmlArticolo);
+                });
+            } else {
+                contenitoreArticoli.html('<p class="text-muted">Nessun prodotto trovato per questo ordine.</p>');
+            }
+
+            $('#shipping-method').text(datiOrdine.shipping.method);
+            const indirizzoSpedizione = $('#shipping-address');
+            indirizzoSpedizione.empty();
+            datiOrdine.shipping.address.forEach(riga => indirizzoSpedizione.append(`<p class="mb-0">${riga}</p>`));
+            $('#tracking-info').find('#tracking-number').text(datiOrdine.shipping.trackingNumber || 'N/D');
+
+
+            const indirizzoFatturazione = $('#billing-address');
+            indirizzoFatturazione.empty();
+            datiOrdine.billing.address.forEach(riga => indirizzoFatturazione.append(`<p class="mb-0">${riga}</p>`));
+            $('#billing-order-date').text(datiOrdine.date);
+            $('#billing-order-id').text(datiOrdine.id);
+
+            $('#payment-method').text(datiOrdine.payment.method);
+            $('#payment-status').text(datiOrdine.payment.status).removeClass().addClass(`text-${datiOrdine.payment.statusColor}`);
+            $('#payment-total').text(`€ ${datiOrdine.payment.total}`);
+
+            $('#summary-order-id').text(datiOrdine.id);
+            $('#summary-date').text(datiOrdine.date);
+            const badgeStatoRiepilogo = $('#summary-status-badge');
+            badgeStatoRiepilogo.text(datiOrdine.status).removeClass().addClass(`badge bg-${datiOrdine.statusColor}`);
+            $('#summary-customer-name').text(datiOrdine.customer.name);
+            $('#summary-customer-email').text(datiOrdine.customer.email);
+            $('#summary-total').text(`€ ${datiOrdine.payment.total}`);
+        }
+
+        /**
+         * Traduce il metodo di spedizione dall'inglese all'italiano
+         * @param {string} metodo - Il metodo di spedizione in inglese
+         * @returns {string} Il metodo tradotto in italiano
+         */
+        function traduciMetodoSpedizione(metodo) {
+            const traduzioni = {
+                'standard': 'Spedizione standard',
+                'express': 'Spedizione espressa',
+                'free': 'Spedizione gratuita',
+                'Spedizione standard': 'Spedizione standard', // Per compatibilità con valori già salvati
+                'Spedizione espressa': 'Spedizione espressa',
+                'Spedizione gratuita': 'Spedizione gratuita'
+            };
+            return traduzioni[metodo] || metodo || 'N/D';
+        }
+
+        /**
+         * Formatta una stringa di data nel formato locale italiano
+         * @param {string} stringaData - Stringa della data da formattare
+         * @param {boolean} includiOreEMinuti - Se includere ore e minuti nella formattazione
+         * @returns {string} Data formattata in italiano o il valore originale in caso di errore
+         */
+        function formattaData(stringaData, includiOreEMinuti = false) {
+            if (!stringaData) return 'N/D';
+            try {
+                const dataOggetto = new Date(stringaData);
+                if (isNaN(dataOggetto.getTime())) {
+                    throw new Error("Data non valida");
+                }
+
+                const opzioniFormattazione = {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                };
+                if (includiOreEMinuti) {
+                    opzioniFormattazione.hour = '2-digit';
+                    opzioniFormattazione.minute = '2-digit';
+                }
+                return dataOggetto.toLocaleDateString('it-IT', opzioniFormattazione);
+            } catch (erroreFormattazione) {
+                console.error("Errore formattazione data:", stringaData, erroreFormattazione);
+                return stringaData;
+            }
+        }
+    </script>
+</head>
+<body>
+
+<!-- Indicatore di caricamento -->
+<div id="indicatore-caricamento" style="display: none;">
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Caricamento...</span>
+    </div>
+    <p class="mt-2">Caricamento dettagli ordine...</p>
+</div>
+
+<div class="container py-5" id="order-content" style="display: none;">
+    <div class="row mb-3">
+        <div class="col">
+            <a href="../account.html" class="link-dark text-decoration-none"><p class="small"><i
+                    class="bi bi-arrow-left"></i> Torna ai tuoi ordini</p></a>
+        </div>
+    </div>
+
+    <div class="row justify-content-between align-items-start mb-4">
+        <div class="col-auto">
+            <h1 class="h3 fw-bold">Ordine <span id="order-id-title">...</span></h1>
+            <p class="text-muted mb-0">Effettuato il <span id="order-date-header">...</span></p>
+        </div>
+        <div class="col-auto mt-3 mt-md-0 d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" disabled>
+                <i class="bi bi-download"></i>
+                <span>Fattura</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+                <i class="bi bi-headset"></i>
+                <span>Assistenza</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Colonna Principale -->
+        <div class="col-lg-8">
+            <div class="d-flex flex-column gap-4">
+                <div class="card p-2">
+                    <div class="card-header bg-white border-bottom-0 pb-2">
+                        <h5 class="card-title d-flex mb-0 fw-bold">
+                            <i class="bi bi-box-seam me-2"></i>
+                            Stato dell'ordine
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="badge fs-6" id="order-status-badge">Caricamento...</span>
+                        </div>
+                        <div class="progress" role="progressbar" aria-label="Stato ordine" aria-valuenow="50"
+                             aria-valuemin="0" aria-valuemax="100" style="height: 8px">
+                            <div class="progress-bar" id="order-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="mt-4">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="icona-stato" id="status-icon-current">
+                                    <i class="bi"></i>
+                                </div>
+                                <div>
+                                    <p class="fw-bold mb-1" id="status-text-current">...</p>
+                                    <p class="text-muted small mb-0">Aggiornato il: <span
+                                            id="status-date-current">...</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prodotti -->
+                <div class="card">
+                    <div class="card-header bg-white border-bottom-0 p-3">
+                        <h5 class="card-title mb-1 fw-bold">Prodotti</h5>
+                        <p class="card-subtitle text-muted small">Prodotti inclusi nel tuo ordine</p>
+                    </div>
+                    <div class="card-body">
+                        <div id="order-items-container" class="d-flex flex-column gap-4">
+                            <div class="text-center text-muted">Caricamento prodotti...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Informazioni -->
+                <div class="card p-2">
+                    <div class="card-header bg-white border-bottom-0">
+                        <h5 class="card-title mb-0 fw-bold">Informazioni aggiuntive</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="nav nav-tabs" id="infoTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link text-dark active" id="shipping-tab" data-bs-toggle="tab"
+                                        data-bs-target="#shipping-tab-pane" type="button" role="tab"
+                                        aria-controls="shipping-tab-pane" aria-selected="true">Spedizione
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link text-dark" id="billing-tab" data-bs-toggle="tab"
+                                        data-bs-target="#billing-tab-pane" type="button" role="tab"
+                                        aria-controls="billing-tab-pane" aria-selected="false">Fatturazione
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link text-dark" id="payment-tab" data-bs-toggle="tab"
+                                        data-bs-target="#payment-tab-pane" type="button" role="tab"
+                                        aria-controls="payment-tab-pane" aria-selected="false">Pagamento
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content pt-4" id="infoTabContent">
+                            <div class="tab-pane fade show active" id="shipping-tab-pane" role="tabpanel"
+                                 aria-labelledby="shipping-tab" tabindex="0">
+                                <div class="d-flex align-items-center gap-2 text-muted mb-3">
+                                    <i class="bi bi-truck"></i>
+                                    <span id="shipping-method">...</span>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <h6 class="fw-bold mb-2">Indirizzo di spedizione</h6>
+                                        <div class="text-muted small" id="shipping-address">
+                                            <p class="mb-0">Caricamento...</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="fw-bold mb-2">Informazioni di tracking</h6>
+                                        <div class="text-muted small" id="tracking-info">
+                                            <p class="mb-1">Codice tracking: <span
+                                                    id="tracking-number">N/D</span></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="billing-tab-pane" role="tabpanel"
+                                 aria-labelledby="billing-tab" tabindex="0">
+                                <h6 class="fw-bold mb-2">Indirizzo di fatturazione</h6>
+                                <div class="text-muted small" id="billing-address">
+                                    <p class="mb-0">Caricamento...</p>
+                                </div>
+                                <hr>
+                                <div class="d-flex align-items-center gap-2 text-muted small mb-2">
+                                    <i class="bi bi-calendar-event"></i>
+                                    <span>Data Ordine: <span id="billing-order-date">...</span></span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 text-muted small">
+                                    <i class="bi bi-hash"></i>
+                                    <span>ID Ordine: <span id="billing-order-id">...</span></span>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="payment-tab-pane" role="tabpanel"
+                                 aria-labelledby="payment-tab" tabindex="0">
+                                <div class="d-flex align-items-center gap-2 text-muted mb-3">
+                                    <i class="bi bi-credit-card"></i>
+                                    <span>Dettagli Pagamento</span>
+                                </div>
+                                <div class="d-flex flex-column gap-2">
+                                    <div class="d-flex justify-content-between small">
+                                        <span class="text-muted">Metodo Pagamento</span>
+                                        <span id="payment-method">Non disponibile</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between small">
+                                        <span class="text-muted">Stato Pagamento</span>
+                                        <span id="payment-status">Non disponibile</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-2">
+                                        <span>Totale Pagato</span>
+                                        <span id="payment-total">€ 0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Colonna Laterale -->
+        <div class="col-lg-4">
+            <div class="d-flex flex-column gap-4">
+                <div class="card p-2">
+                    <div class="card-header bg-white border-bottom-0">
+                        <h5 class="card-title mb-0 fw-bold">Riepilogo</h5>
+                    </div>
+                    <div class="card-body pb-1 d-flex flex-column gap-2">
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">Numero ordine</span>
+                            <span class="fw-bold" id="summary-order-id">...</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">Data</span>
+                            <span class="fw-bold" id="summary-date">...</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">Stato</span>
+                            <span class="badge" id="summary-status-badge">...</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">Cliente</span>
+                            <span id="summary-customer-name" class="text-end">...</span>
+                        </div>
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">Email</span>
+                            <span id="summary-customer-email" class="text-end">...</span>
+                        </div>
+                        <hr class="my-2">
+                        <div class="d-flex justify-content-between fw-bold">
+                            <span>Totale</span>
+                            <span id="summary-total">€ 0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Azioni -->
+                <div class="card p-2">
+                    <div class="card-header bg-white border-bottom-0">
+                        <h5 class="card-title mb-0 fw-bold">Azioni</h5>
+                    </div>
+                    <div class="card-body d-grid gap-2">
+                        <button type="button" class="btn btn-outline-secondary text-start">
+                            <i class="bi bi-headset me-2"></i>Contatta l'assistenza
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary text-start py-2" disabled>
+                            <i class="bi bi-box-seam me-2"></i>Richiedi un reso
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary text-start py-2" disabled>
+                            <i class="bi bi-download me-2"></i>Scarica fattura
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Assistenza -->
+                <div class="card p-2">
+                    <div class="card-header bg-white border-bottom-0">
+                        <h5 class="card-title mb-0 fw-bold">Hai bisogno di aiuto?</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-muted">Se hai domande o problemi con il tuo ordine, il nostro team di
+                            assistenza è a tua disposizione.</p>
+                        <button type="button" class="btn btn-dark w-100 mt-2 py-2 pt-1">Contatta l'assistenza</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
+        crossorigin="anonymous"></script>
+</body>
+</html>

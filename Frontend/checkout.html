@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Checkout - Artigianato Online</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="images/favicon.png">
+
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Assicurati che il percorso a style.css sia corretto -->
+    <link type="text/css" rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>    <script>
+        const urlBaseApi = "";
+        const tipoStorage = localStorage;
+        const chiaveCarrello = 'cart';
+        const chiaveDatiUtente = 'userData';
+        const chiaveToken = 'sessionToken';
+
+        let datiCarrello = {};
+        let datiUtente = null;
+        let tokenAuth = null;
+
+        try {
+            datiCarrello = JSON.parse(tipoStorage.getItem(chiaveCarrello) || '{}');
+        } catch (e) {
+            console.error("Errore nel parsing del carrello:", e);
+            tipoStorage.removeItem(chiaveCarrello);
+        }
+        try {
+            datiUtente = JSON.parse(localStorage.getItem(chiaveDatiUtente) || 'null');
+            tokenAuth = localStorage.getItem(chiaveToken);
+        } catch (e) {
+            console.error("Errore nel parsing dei dati utente:", e);
+            localStorage.removeItem(chiaveDatiUtente);
+            localStorage.removeItem(chiaveToken);
+        }        $(document).ready(function () {
+
+            const riepilogoArticoliCarrello = $('#cart-summary-items');
+            const elementoSubtotale = $('#subtotal');
+            const elementoCostoSpedizione = $('#shipping-cost');
+            const elementoPrezzoTotale = $('#total-price');
+            const inputOpzioniSpedizione = $('#shipping-options input[name="shippingMethod"]');
+            const modulo = $('#checkout-form');
+            const pulsanteCompletaOrdine = $('#complete-order-btn');
+            const segnapostoAlert = $('#alert-placeholder');
+            const minimoSpedizioneGratuita = 100;
+
+            let subtotaleCorrente = 0;
+            let costoSpedizioneCorrente = 0;            /**
+             * Popola il riepilogo del carrello
+             */
+            function popolaRiepilogoCarrello() {
+                riepilogoArticoliCarrello.empty();
+                subtotaleCorrente = 0;
+                const articoli = Object.values(datiCarrello);
+
+                if (articoli.length === 0) {
+                    riepilogoArticoliCarrello.html('<p class="text-center text-muted">Il tuo carrello è vuoto.</p>');
+                    pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');                    disabilitaCampiForm(true);
+                    pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');
+                    return;
+                }
+
+                const listaArticoli = $('<ul class="list-unstyled"></ul>');
+                articoli.forEach(articolo => {
+                    const prezzo = parseFloat(articolo.price);
+                    const quantita = parseInt(articolo.quantity, 10);
+
+                    if (!isNaN(prezzo) && !isNaN(quantita) && quantita > 0) {
+                        const totaleArticolo = prezzo * quantita;
+                        subtotaleCorrente += totaleArticolo;
+                        const elementoLista = $(`
+                            <li class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex align-items-center">
+                                    <img src="${articolo.image_url}" alt="${articolo.name || 'Prodotto'}" class="immagine-prodotto-carrello me-2" onerror="this.onerror=null;this.src='images/favicon.png';">
+                                    <div>
+                                        <p class="small mb-0">${articolo.name || 'Nome Prodotto Mancante'}</p>
+                                        <p class="text-muted mb-0 small">${articolo.artisan_shop_name || 'Negozio Sconosciuto'}</p>
+                                        <p class="text-muted small mb-0">Quantità: ${quantita}</p>
+                                    </div>
+                                </div>
+                                <small>${formattaPrezzo(totaleArticolo)}</small>
+                            </li>
+                        `);
+                        listaArticoli.append(elementoLista);
+                    } else {
+                        console.warn("Articolo nel carrello con dati non validi:", articolo);
+                        const elementoErrore = $(`<li class="text-danger small mb-2">Errore: Articolo non valido nel carrello (ID: ${articolo.id || 'NA'})</li>`);
+                        listaArticoli.append(elementoErrore);
+                    }
+                });
+                riepilogoArticoliCarrello.append(listaArticoli);                disabilitaCampiForm(false);
+                aggiornaTotale();
+            }
+
+            /**
+             * Popola i dati dell'utente nel modulo se loggato
+             */
+            function popolaDatiUtente() {
+                if (datiUtente) {
+                    const partiNome = datiUtente.full_name ? datiUtente.full_name.split(' ') : ['', ''];
+                    $('#first-name').val(partiNome[0] || '');
+                    $('#last-name').val(partiNome.slice(1).join(' ') || '');
+                    $('#email').val(datiUtente.email || '');
+                    $('#phone').val(datiUtente.phone_number || '');
+                    if (datiUtente.address) {
+                        $('#address').val(datiUtente.address);
+                    }
+                    $('#bank-customer-name').text(datiUtente.full_name || '[Nome Cognome]');
+                } else {                    $('#bank-customer-name').text('[Nome Cognome]');
+                    mostraAlert('Sembra che tu non sia loggato. Per procedere, <a href="/login.html">accedi</a> o <a href="/register.html">registrati</a>.', 'info');
+                    disabilitaCampiForm(true);
+                    pulsanteCompletaOrdine.prop('disabled', true).text('Accedi per continuare');
+                }
+            }
+
+            /**
+             * Aggiorna il totale dell'ordine e la gestione spedizione gratuita
+             */
+            function aggiornaTotale() {
+                const eleggibileSpedizioneGratuita = subtotaleCorrente >= minimoSpedizioneGratuita;
+                const contenitoreSpedizioneGratuita = $('.free-shipping-option');
+                const radioSpedizioneGratuita = $('#shipping-free');
+
+                if (eleggibileSpedizioneGratuita) {
+                    contenitoreSpedizioneGratuita.show();
+                    const attualmenteSelezionato = inputOpzioniSpedizione.filter(':checked');
+                    if (attualmenteSelezionato.attr('id') !== 'shipping-express') {
+                        if (!radioSpedizioneGratuita.is(':checked')) {
+                            radioSpedizioneGratuita.prop('checked', true);
+                            inputOpzioniSpedizione.not(radioSpedizioneGratuita).prop('checked', false);
+                        }
+                    }
+
+                } else {
+                    if (radioSpedizioneGratuita.is(':checked')) {
+                        $('#shipping-standard').prop('checked', true);
+                    }
+                    contenitoreSpedizioneGratuita.hide();
+                    radioSpedizioneGratuita.prop('checked', false);
+                }
+
+                const spedizioneSelezionata = inputOpzioniSpedizione.filter(':checked');
+                costoSpedizioneCorrente = parseFloat(spedizioneSelezionata.data('cost') || 0);
+
+                elementoSubtotale.text(formattaPrezzo(subtotaleCorrente));
+                elementoCostoSpedizione.text(formattaPrezzo(costoSpedizioneCorrente));
+                elementoPrezzoTotale.text(formattaPrezzo(subtotaleCorrente + costoSpedizioneCorrente));
+            }            inputOpzioniSpedizione.on('change', function () {
+                aggiornaTotale();
+            });
+
+            modulo.on('submit', async function (event) {
+                event.preventDefault();
+                segnapostoAlert.empty();
+
+                if (!tokenAuth) {
+                    mostraAlert('Devi essere loggato per completare l\'ordine. <a href="/login.html">Accedi</a>', 'warning');
+                    pulsanteCompletaOrdine.prop('disabled', true);
+                    return;
+                }
+
+                if (Object.keys(datiCarrello).length === 0) {
+                    mostraAlert('Il tuo carrello è vuoto.', 'warning');
+                    pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');
+                    return;
+                }
+
+                if (!this.checkValidity()) {
+                    event.stopPropagation();
+                    $(this).addClass('was-validated');
+                    mostraAlert("Per favore, compila tutti i campi necessari evidenziati in rosso.", "warning");
+                    const primoElementoInvalido = $(this).find(':invalid').first();
+                    if (primoElementoInvalido.length) {
+                        primoElementoInvalido[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+                        primoElementoInvalido.focus();
+                    }
+                    return;
+                }
+                $(this).addClass('was-validated');
+
+                pulsanteCompletaOrdine.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Elaborazione...');
+
+                const articoliCarrello = Object.values(datiCarrello).map(articolo => ({
+                    product_id: articolo.id,
+                    quantity: articolo.quantity
+                }));                const indirizzoSpedizione = $('#address').val().trim();
+                const spedizioneSelezionata = inputOpzioniSpedizione.filter(':checked');
+                const valoreMetodoSpedizione = spedizioneSelezionata.val(); // Usa il value invece del testo del label
+                const note = $('#notes').val().trim();
+                const metodoPagamento = $('#payment-tabs .nav-link.active').data('payment-method') || 'card';
+
+                const datiOrdine = {
+                    customer_id: datiUtente.user_id,
+                    items: articoliCarrello,
+                    shipping_address: indirizzoSpedizione,
+                    billing_address: indirizzoSpedizione,
+                    shipping_method: valoreMetodoSpedizione,
+                    notes: note || null,
+                    total_amount: subtotaleCorrente + costoSpedizioneCorrente
+                };
+
+                let datiOrdineCreato = null;                try {
+                    console.log("Invio Payload Ordine:", JSON.stringify(datiOrdine, null, 2));
+                    const rispostaOrdine = await fetch(`${urlBaseApi}/api/orders`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${tokenAuth}`
+                        },
+                        body: JSON.stringify(datiOrdine)
+                    });
+
+                    if (!rispostaOrdine.ok) {
+                        let messaggioErrore = `Errore ${rispostaOrdine.status}: ${rispostaOrdine.statusText}`;
+                        try {
+                            const datiErrore = await rispostaOrdine.json();
+                            messaggioErrore = `Errore creazione ordine: ${datiErrore.message || messaggioErrore}`;
+                        } catch (e) {
+                        }
+                        throw new Error(messaggioErrore);
+                    }
+
+                    datiOrdineCreato = await rispostaOrdine.json();
+                    console.log("Risposta Ordine:", datiOrdineCreato);
+                    $('#bank-order-ref').text(datiOrdineCreato.order_id || '[N/A]');
+
+                } catch (error) {
+                    console.error("Errore API Ordine:", error);
+                    mostraAlert(`Errore durante la creazione dell'ordine: ${error.message || 'Si è verificato un problema.'}`, "danger");
+                    pulsanteCompletaOrdine.prop('disabled', false).text('Completa Ordine');
+                    return;
+                }                const importoTotale = subtotaleCorrente + costoSpedizioneCorrente;
+                const datiPagamento = {
+                    order_id: datiOrdineCreato.order_id,
+                    amount: importoTotale,
+                    payment_method: metodoPagamento,
+                    status: (metodoPagamento === 'bank') ? 'pending' : 'completed',
+                    payment_date: new Date().toISOString()
+                };
+
+                try {
+                    console.log("Invio Payload Pagamento:", JSON.stringify(datiPagamento, null, 2));
+                    const rispostaPagamento = await fetch(`${urlBaseApi}/api/payments`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${tokenAuth}`
+                        },
+                        body: JSON.stringify(datiPagamento)
+                    });
+
+                    if (!rispostaPagamento.ok) {
+                        let messaggioErrore = `Errore ${rispostaPagamento.status}: ${rispostaPagamento.statusText}`;
+                        try {
+                            const datiErrore = await rispostaPagamento.json();
+                            messaggioErrore = `Errore registrazione pagamento: ${datiErrore.message || messaggioErrore}`;
+                        } catch (e) {
+                        }
+                        mostraAlert(`L'ordine #${datiOrdineCreato.order_id} è stato creato, ma si è verificato un errore durante la registrazione del pagamento: ${messaggioErrore}. Contatta l'assistenza o riprova.`, "warning");
+                        pulsanteCompletaOrdine.prop('disabled', false).text('Riprova Pagamento?');
+                        return;
+                    }                    const esitoPagamento = await rispostaPagamento.json();
+                    console.log("Risposta Pagamento:", esitoPagamento);
+
+                    tipoStorage.removeItem(chiaveCarrello);
+                    datiCarrello = {};
+
+                    mostraAlert(`Ordine #${datiOrdineCreato.order_id} completato con successo! Riceverai una conferma via email.`, 'success');
+                    pulsanteCompletaOrdine.removeClass('btn-primary').addClass('btn-success').text('Ordine Completato');
+
+                } catch (error) {
+                    console.error("Errore API Pagamento:", error);
+                    mostraAlert(`Ordine #${datiOrdineCreato.order_id} creato, ma errore imprevisto durante il pagamento: ${error.message || 'Problema di comunicazione.'}. Contatta l'assistenza.`, "warning");
+                    pulsanteCompletaOrdine.prop('disabled', false).text('Riprova Pagamento?');
+                    return;
+                }
+            });
+
+            $('#payment-tabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (event) {
+
+            });            // Inizializzazione
+            popolaRiepilogoCarrello();
+            popolaDatiUtente();
+        });        /**
+         * Disabilita/Riabilita campi form (tranne riepilogo)
+         * @param {boolean} disable - Se true disabilita i campi, se false li riabilita
+         */
+        function disabilitaCampiForm(disable) {
+            $('#checkout-form .card:not(:last-of-type) :input').prop('disabled', disable);
+        }        /**
+         * Formatta un prezzo in formato euro
+         * @param {number} prezzo - Il prezzo da formattare
+         * @returns {string} Il prezzo formattato (es. "€12,50")
+         */
+        function formattaPrezzo(prezzo) {
+            if (typeof prezzo !== 'number' || isNaN(prezzo)) {
+                console.warn("Tentativo di formattare un prezzo non valido:", prezzo);
+                return '€--.--';
+            }
+            return `€${prezzo.toFixed(2).replace('.', ',')}`;
+        }        /**
+         * Gestisce la visualizzazione di alert Bootstrap
+         * @param {string} messaggio - Il messaggio da mostrare
+         * @param {string} tipo - Il tipo di alert ('success', 'danger', 'warning', 'info')
+         */
+        function mostraAlert(messaggio, tipo = 'success') {
+            const contenitore = document.createElement('div');
+            const alertPlaceholder = $('#alert-placeholder');
+            contenitore.innerHTML = `
+                <div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+                   ${messaggio}
+                   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>`;
+            alertPlaceholder.html(contenitore);
+        }
+
+    </script>
+</head>
+<body>
+
+<div class="container py-5">
+    <div class="row mb-3">
+        <div class="col">
+            <a href="carrello.html" class="link-dark text-decoration-none"><p class="small"><i
+                    class="bi bi-arrow-left"></i> Torna al carrello</p></a>
+        </div>
+    </div>
+
+    <h1 class="mb-5 fw-bold">Checkout</h1>
+
+    <div id="alert-placeholder" class="mb-4"></div>
+
+    <form id="checkout-form" novalidate>
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="d-flex flex-column gap-4">
+
+                    <div class="card p-2">
+                        <div class="card-header bg-white border-bottom-0">
+                            <h5 class="card-title mb-0 fw-bold">
+                                <i class="bi bi-truck me-2"></i>Informazioni di spedizione
+                            </h5>
+                            <small class="text-muted">Inserisci i dettagli per la consegna del tuo ordine</small>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="first-name" class="form-label small fw-semibold">Nome</label>
+                                    <input type="text" class="form-control" id="first-name"
+                                           placeholder="Il tuo nome" required>
+                                    <div class="invalid-feedback">
+                                        Il nome è obbligatorio.
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="last-name" class="form-label small fw-semibold">Cognome</label>
+                                    <input type="text" class="form-control" id="last-name"
+                                           placeholder="Il tuo cognome" required>
+                                    <div class="invalid-feedback">
+                                        Il cognome è obbligatorio.
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <label for="email" class="form-label small fw-semibold">Email</label>
+                                    <input type="email" class="form-control" id="email" placeholder="nome@esempio.com"
+                                           required>
+                                    <div class="invalid-feedback">
+                                        Inserisci un indirizzo email valido.
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <label for="phone" class="form-label small fw-semibold">Telefono <span
+                                            class="text-muted fw-normal">(Opzionale)</span></label>
+                                    <input type="tel" class="form-control" id="phone" placeholder="+39 123 456 7890">
+                                </div>
+                                <div class="col-12">
+                                    <label for="address" class="form-label small fw-semibold">Indirizzo completo</label>
+                                    <textarea class="form-control" id="address" rows="3" placeholder="Es: Mario Rossi
+Via Roma, 123
+20100 Milano MI
+Italia" required></textarea>
+                                    <div class="form-text small mt-1">Inserisci nome/cognome (se diverso), via, numero
+                                        civico, CAP, città, provincia e paese.
+                                    </div>
+                                    <div class="invalid-feedback">
+                                        L'indirizzo di spedizione è obbligatorio.
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <label for="notes" class="form-label small fw-semibold">Note per la consegna <span
+                                            class="text-muted fw-normal">(Opzionale)</span></label>
+                                    <textarea class="form-control" id="notes" rows="2"
+                                              placeholder="Istruzioni speciali per il corriere..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metodo di Pagamento -->
+                    <div class="card p-2">
+                        <div class="card-header bg-white border-bottom-0">
+                            <h5 class="card-title mb-0 fw-bold">
+                                <i class="bi bi-credit-card me-2"></i>Metodo di pagamento
+                            </h5>
+                            <small class="text-muted">Scegli come vuoi pagare il tuo ordine</small>
+                        </div>
+                        <div class="card-body">
+                            <ul class="nav nav-tabs nav-fill mb-3" id="payment-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link text-dark active" id="card-tab-btn" data-bs-toggle="tab"
+                                            data-bs-target="#card-tab-pane" type="button" role="tab"
+                                            aria-controls="card-tab-pane" aria-selected="true"
+                                            data-payment-method="credit_card">Carta di credito
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link text-dark" id="paypal-tab-btn" data-bs-toggle="tab"
+                                            data-bs-target="#paypal-tab-pane" type="button" role="tab"
+                                            aria-controls="paypal-tab-pane" aria-selected="false"
+                                            data-payment-method="paypal">PayPal
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link text-dark" id="bank-tab-btn" data-bs-toggle="tab"
+                                            data-bs-target="#bank-tab-pane" type="button" role="tab"
+                                            aria-controls="bank-tab-pane" aria-selected="false"
+                                            data-payment-method="bank_transfer">Bonifico
+                                    </button>
+                                </li>
+                            </ul>
+                            <div class="tab-content" id="payment-tabs-content">
+                                <div class="tab-pane fade show active" id="card-tab-pane" role="tabpanel"
+                                     aria-labelledby="card-tab-btn" tabindex="0">
+                                    <p class="text-muted small">Il pagamento con carta verrà gestito tramite un gateway
+                                        sicuro esterno (es. Stripe, non implementato in questo esempio) al momento della
+                                        conferma dell'ordine.</p>
+                                    <p class="small"><strong>Non ti verranno chiesti i dati della carta qui.</strong>
+                                        Sarai reindirizzato alla pagina sicura del provider di pagamento dopo aver
+                                        cliccato su "Completa Ordine".</p>
+                                </div>
+                                <div class="tab-pane fade" id="paypal-tab-pane" role="tabpanel"
+                                     aria-labelledby="paypal-tab-btn" tabindex="0">
+                                    <div class="text-center py-4">
+                                        <i class="bi bi-paypal mb-4 fs-1"></i>
+                                        <p class="text-muted mb-3 small">
+                                            Verrai reindirizzato al sito di PayPal per completare il pagamento dopo aver
+                                            cliccato su "Completa Ordine".
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade" id="bank-tab-pane" role="tabpanel"
+                                     aria-labelledby="bank-tab-btn" tabindex="0">
+                                    <div class="p-3 bg-light rounded border">
+                                        <p class="fw-medium mb-1 small">Dettagli bancari:</p>
+                                        <p class="small mb-0">Intestatario: Artigianato Online S.r.l.</p>
+                                        <p class="small mb-0">IBAN: ITXXXXXXXXXXXXXXXXXXXXXXXXX</p>
+                                        <p class="small mb-0">Banca: La Banca</p>
+                                        <p class="small mt-2">Causale: Ordine <strong id="bank-order-ref">[Numero
+                                            Ordine]</strong> - <span id="bank-customer-name">[Nome Cognome]</span></p>
+                                    </div>
+                                    <p class="small text-muted mt-2">
+                                        Il tuo ordine verrà elaborato dopo la ricezione del pagamento (stato:
+                                        'pending'). Riceverai i dettagli completi anche via email. Includi il
+                                        riferimento ordine e nome/cognome nella causale.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metodo di Spedizione -->
+                    <div class="card p-2">
+                        <div class="card-header bg-white border-bottom-0">
+                            <h5 class="card-title mb-0 fw-bold">Metodo di spedizione</h5>
+                            <small class="text-muted">Scegli come ricevere il tuo ordine</small>
+                        </div>
+                        <div class="card-body">
+                            <div id="shipping-options">
+                                <div class="form-check border p-3 rounded d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <input class="form-check-input" type="radio" name="shippingMethod"
+                                               id="shipping-standard" value="standard" data-cost="4.99" checked
+                                               required>
+                                        <label class="form-check-label ms-2 small" for="shipping-standard">
+                                            Spedizione standard (3-5 giorni lavorativi)
+                                        </label>
+                                    </div>
+                                    <div class="fw-medium small">€4.99</div>
+                                </div>
+                                <div class="form-check border p-3 rounded d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <input class="form-check-input" type="radio" name="shippingMethod"
+                                               id="shipping-express" value="express" data-cost="9.99" required>
+                                        <label class="form-check-label ms-2 small" for="shipping-express">
+                                            Spedizione espressa (1-2 giorni lavorativi)
+                                        </label>
+                                    </div>
+                                    <div class="fw-medium small">€9.99</div>
+                                </div>
+                                <div class="form-check border p-3 rounded d-flex justify-content-between align-items-center free-shipping-option"
+                                     style="display: none;">
+                                    <div>
+                                        <input class="form-check-input" type="radio" name="shippingMethod"
+                                               id="shipping-free" value="free" data-cost="0.00" required>
+                                        <label class="form-check-label ms-2 small" for="shipping-free">
+                                            Spedizione gratuita (Ordine > €100)
+                                        </label>
+                                    </div>
+                                    <div class="fw-medium small">Gratuita</div>
+                                </div>
+                                <div class="invalid-feedback">
+                                    Seleziona un metodo di spedizione.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Riepilogo Ordine -->
+            <div class="col-lg-4">
+                <div class="card sticky-top p-2 shadow-sm" style="top: 20px">
+                    <div class="card-header bg-white border-bottom-0">
+                        <h5 class="card-title mb-0 fw-bold">Riepilogo Ordine</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="cart-summary-items" class="mb-3">
+                            <!-- Caricato da JS -->
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Caricamento...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="text-dark text-opacity-50">
+                        <ul class="list-unstyled mb-3 small">
+                            <li class="d-flex justify-content-between">
+                                <span>Subtotale</span>
+                                <span id="subtotal">€0.00</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span>Spedizione</span>
+                                <span id="shipping-cost">€0.00</span>
+                            </li>
+                        </ul>
+                        <hr class="text-dark text-opacity-50">
+                        <div class="d-flex justify-content-between fw-bold fs-5 mb-4">
+                            <span>Totale</span>
+                            <span id="total-price">€0.00</span>
+                        </div>
+                        <button type="submit" id="complete-order-btn" class="btn btn-dark w-100 fw-semibold py-2">
+                            Completa Ordine
+                        </button>
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0 pt-0">
+                        <div class="row">
+                            <div class="col-12 small text-muted mb-2">
+                                <i class="bi bi-shield-check me-1"></i>
+                                <span>Pagamento sicuro e crittografato</span>
+                            </div>
+                            <div class="col-12 small text-muted">
+                                <i class="bi bi-truck me-1"></i>
+                                <span>Spedizione gratuita per ordini > €100</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+
+<div id="footer-placeholder"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"></script>
+<script src="js/headerfooterloader.js"></script>
+</body>
+</html>
