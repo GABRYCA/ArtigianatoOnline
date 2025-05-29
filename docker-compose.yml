@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:17.4-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - rete-app-artigianato
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./Backend
+    container_name: backend_node
+    restart: always
+    # ports:
+    #  - "${BACKEND_PORT}:3000"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET:-default_jwt_secret}
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      # SSL_ENABLED: ${SSL_ENABLED:-false}
+      # PUBLIC_BACKEND_URL: "http://${HOST_MACHINE_IP}:${BACKEND_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - rete-app-artigianato
+
+  frontend:
+    build: ./Frontend
+    container_name: frontend_nginx
+    restart: always
+    #ports:
+    #  - "${FRONTEND_PORT}:80"
+    networks:
+      - rete-app-artigianato
+
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx_proxy_manager
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+      - '81:81'
+    volumes:
+      - npm-data:/data
+      - npm-letsencrypt:/etc/letsencrypt
+    networks:
+      - rete-app-artigianato
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  db-data:
+  npm-data:
+  npm-letsencrypt:
+
+networks:
+  rete-app-artigianato:
+    driver: bridge

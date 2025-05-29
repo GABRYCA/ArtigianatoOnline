@@ -1,0 +1,33 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches:
+      - deployment
+  workflow_run:
+    workflows: ['Auto-merge deployment']
+    types:
+      - completed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.PROJECT_PATH }}
+            echo "Pulling latest changes..."
+            git pull origin deployment
+            echo "Stopping current services..."
+            sudo docker compose down --remove-orphans
+            echo "Building and starting new services..."
+            sudo docker compose up -d --build
+            echo "Cleaning up old images..."

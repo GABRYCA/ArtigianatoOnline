@@ -1,0 +1,39 @@
+name: Auto-merge deployment
+
+on:
+  push:
+    branches:
+      - frontend
+      - backend
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Git config
+        run: |
+          git config user.name "anonymousgca"
+          git config user.email "anonymousgca@anonymousgca.eu"
+
+      - name: Checkout deployment
+        run: git checkout deployment
+
+      - name: Deployment pull
+        run: git pull origin deployment
+
+      - name: Merge
+        run: |
+          git merge origin/frontend --no-ff -m "Auto-merge deployment"
+          git merge origin/backend --no-ff -m "Auto-merge deployment"
+
+      - name: Push
+        run: git push origin deployment
