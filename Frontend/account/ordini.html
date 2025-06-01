@@ -233,7 +233,7 @@
          */
         function caricaDatiPagamento(idOrdine) {
             const tokenAutenticazione = localStorage.getItem('sessionToken');
-            
+
             $('#payment-method').text('Caricamento...');
             $('#payment-status').text('Caricamento...');
             $('#payment-total').text('Caricamento...');
@@ -248,7 +248,7 @@
                     datiPagamentoGlobali = datiPagamento;
                     datiPagamentoCaricati = true;
                     aggiornaPagamentoDati(datiPagamento);
-                },                error: function (rispostaHttp, testoStato, errore) {
+                }, error: function (rispostaHttp, testoStato, errore) {
                     if (rispostaHttp.status === 404) {
                         console.info('Nessun pagamento registrato per questo ordine');
                         if (datiOrdineGrezzi && datiOrdineGrezzi.status === 'pending') {
@@ -283,14 +283,17 @@
                 };
 
                 const mappaStatiPagamento = {
-                    'pending': { text: 'In Attesa', color: 'warning' },
-                    'completed': { text: 'Completato', color: 'success' },
-                    'failed': { text: 'Fallito', color: 'danger' },
-                    'refunded': { text: 'Rimborsato', color: 'info' }
+                    'pending': {text: 'In Attesa', color: 'warning'},
+                    'completed': {text: 'Completato', color: 'success'},
+                    'failed': {text: 'Fallito', color: 'danger'},
+                    'refunded': {text: 'Rimborsato', color: 'info'}
                 };
 
                 const metodoPagamento = mappaMetodiPagamento[datiPagamento.payment_method] || datiPagamento.payment_method || 'N/D';
-                const infoStato = mappaStatiPagamento[datiPagamento.status] || { text: datiPagamento.status || 'N/D', color: 'muted' };
+                const infoStato = mappaStatiPagamento[datiPagamento.status] || {
+                    text: datiPagamento.status || 'N/D',
+                    color: 'muted'
+                };
 
                 $('#payment-method').text(metodoPagamento);
                 $('#payment-status').text(infoStato.text).removeClass().addClass(`text-${infoStato.color}`);
@@ -298,7 +301,7 @@
 
                 if (datiPagamento.transaction_id) {
                     $('.payment-transaction-info').remove();
-                    
+
                     const infoTransazione = $(`
                         <div class="payment-transaction-info d-flex justify-content-between small mt-2 pt-2 border-top">
                             <span class="text-muted">ID Transazione</span>
@@ -310,7 +313,7 @@
 
                 if (datiPagamento.payment_date) {
                     $('.payment-date-info').remove();
-                    
+
                     const dataFormattata = formattaData(datiPagamento.payment_date, true);
                     const infoData = $(`
                         <div class="payment-date-info d-flex justify-content-between small mt-1">
@@ -318,10 +321,10 @@
                             <span>${dataFormattata}</span>
                         </div>
                     `);
-                    
+
                     const ultimoElemento = $('.payment-transaction-info').length > 0 ?
-                                         $('.payment-transaction-info') : 
-                                         $('#payment-total').parent();
+                        $('.payment-transaction-info') :
+                        $('#payment-total').parent();
                     ultimoElemento.before(infoData);
                 }
 
@@ -329,7 +332,7 @@
                 $('#payment-method').text('N/D');
                 $('#payment-status').text('N/D').removeClass().addClass('text-muted');
                 $('#payment-total').text('€ 0.00');
-                
+
                 $('.payment-transaction-info, .payment-date-info').remove();
             }
         }
@@ -349,7 +352,8 @@
                 delivered: {text: "Consegnato", progress: 100, icon: 'bi-check-circle-fill', color: 'success'},
                 cancelled: {text: "Annullato", progress: 0, icon: 'bi-x-circle-fill', color: 'danger'},
                 refunded: {text: "Rimborsato", progress: 0, icon: 'bi-arrow-counterclockwise', color: 'secondary'},
-                default: {text: datiGrezzi.status, progress: 50, icon: 'bi-question-circle', color: 'secondary'}            };
+                default: {text: datiGrezzi.status, progress: 50, icon: 'bi-question-circle', color: 'secondary'}
+            };
             const infoStatoCorrente = mappaStati[datiGrezzi.status] || mappaStati.default;
 
             return {
@@ -373,7 +377,7 @@
                     method: traduciMetodoSpedizione(datiGrezzi.shipping_method),
                     address: datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito'],
                     trackingNumber: datiGrezzi.tracking_number || 'Non disponibile',
-                },                billing: {
+                }, billing: {
                     address: datiGrezzi.billing_address ? datiGrezzi.billing_address.split(',').map(p => p.trim()) : (datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito']),
                 },
                 customer: {
@@ -440,7 +444,8 @@
 
             const indirizzoFatturazione = $('#billing-address');
             indirizzoFatturazione.empty();
-            datiOrdine.billing.address.forEach(riga => indirizzoFatturazione.append(`<p class="mb-0">${riga}</p>`));            $('#billing-order-date').text(datiOrdine.date);
+            datiOrdine.billing.address.forEach(riga => indirizzoFatturazione.append(`<p class="mb-0">${riga}</p>`));
+            $('#billing-order-date').text(datiOrdine.date);
             $('#billing-order-id').text(datiOrdine.id);
 
             $('#summary-order-id').text(datiOrdine.id);
@@ -769,11 +774,11 @@
         function resetDatiPagamento() {
             datiPagamentoCaricati = false;
             datiPagamentoGlobali = null;
-            
+
             $('#payment-method').text('N/D');
             $('#payment-status').text('N/D').removeClass().addClass('text-muted');
             $('#payment-total').text('€ 0.00');
-            
+
             $('.payment-transaction-info, .payment-date-info').remove();
         }
     </script>
