@@ -366,7 +366,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
 /**
  * @swagger
- * /api/users/{id}/cambia-password:
+ * /api/users/{id}/changepassword:
  *   put:
  *     summary: Cambia la password di un utente specifico.
  *     tags: [Utenti]
@@ -409,7 +409,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
  *       '500':
  *         description: Errore interno del server.
  */
-router.put('/:id/cambia-password', authenticateToken, async (req, res) => {
+router.put('/:id/changepassword', authenticateToken, async (req, res) => {
     const targetUserId = parseInt(req.params.id, 10);
     const requestingUserId = req.user.userId;
     const requestingUserRole = req.user.role;
