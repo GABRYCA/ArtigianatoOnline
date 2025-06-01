@@ -1,6 +1,6 @@
 import express from 'express';
 import db from '../db/database.js';
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
+import {authenticateToken, authorizeRoles} from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -148,7 +148,7 @@ const router = express.Router();
  *     description: |
  *       Crea un nuovo record di pagamento associato a un ordine.
  *       Se il pagamento ha stato 'completed', aggiorna anche lo stato dell'ordine a 'paid'.
- *       Accessibile solo agli amministratori (o a un processo interno/webhook).
+ *       Accessibile ai clienti per i propri ordini e agli amministratori per qualsiasi ordine.
  *       Utilizza una transazione per garantire la coerenza tra le tabelle `payments` e `orders`.
  *     security:
  *       - bearerAuth: []
@@ -170,39 +170,39 @@ const router = express.Router();
  *       '401':
  *         description: Non autorizzato.
  *       '403':
- *         description: Accesso negato (non admin).
+ *         description: Accesso negato (non sei il proprietario dell'ordine).
  *       '409':
  *          description: Conflitto (es. pagamento già esistente per l'ordine o transaction_id duplicato).
  *       '500':
  *         description: Errore interno del server.
  */
-router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-    const { order_id, amount, payment_method, transaction_id, status, payment_date } = req.body;
+router.post('/', authenticateToken, async (req, res) => {
+    const {order_id, amount, payment_method, transaction_id, status, payment_date} = req.body;
+    const requestingUserId = req.user.userId;
+    const requestingUserRole = req.user.role;
     const validStatuses = ['pending', 'completed', 'failed', 'refunded'];
     const validMethods = ['credit_card', 'paypal', 'bank_transfer', 'other'];
 
-    // Validazione
+    // Validazione base
     if (order_id === undefined || amount === undefined || !payment_method || !status) {
-        return res.status(400).json({ message: 'order_id, amount, payment_method e status sono obbligatori.' });
+        return res.status(400).json({message: 'order_id, amount, payment_method e status sono obbligatori.'});
     }
     if (amount < 0) {
-        return res.status(400).json({ message: 'L\'importo non può essere negativo.' });
+        return res.status(400).json({message: 'L\'importo non può essere negativo.'});
     }
     if (!validMethods.includes(payment_method)) {
-        return res.status(400).json({ message: 'Metodo di pagamento non valido.' });
+        return res.status(400).json({message: 'Metodo di pagamento non valido.'});
     }
     if (!validStatuses.includes(status)) {
-        return res.status(400).json({ message: 'Stato del pagamento non valido.' });
+        return res.status(400).json({message: 'Stato del pagamento non valido.'});
     }
 
     const client = await db.getClient();
 
     try {
-        await client.query('BEGIN');
-
-        // Verifica l'ordine
+        await client.query('BEGIN');        // Verifica l'ordine e i permessi di accesso
         const orderResult = await client.query(
-            'SELECT order_id, total_amount, status FROM orders WHERE order_id = $1 FOR UPDATE', // Lock della riga ordine
+            'SELECT order_id, customer_id, total_amount, status FROM orders WHERE order_id = $1 FOR UPDATE', // Lock della riga ordine
             [order_id]
         );
 
@@ -210,6 +210,12 @@ router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) =>
             throw new Error(`Ordine con ID ${order_id} non trovato.`);
         }
         const order = orderResult.rows[0];
+
+        // Verifica che l'utente sia autorizzato a pagare questo ordine
+        // Gli admin possono pagare qualsiasi ordine, i clienti solo i propri
+        if (requestingUserRole !== 'admin' && order.customer_id !== requestingUserId) {
+            throw new Error(`Non sei autorizzato a effettuare il pagamento per questo ordine.`);
+        }
 
         // Verifico coerenza importo
         if (parseFloat(order.total_amount) !== parseFloat(amount)) {
@@ -234,7 +240,10 @@ router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) =>
         // Aggiorno lo stato
         if (status === 'completed') {
             await client.query(
-                `UPDATE orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1`,
+                `UPDATE orders
+                 SET status = 'paid',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE order_id = $1`,
                 [order_id]
             );
             // console.log(`Ordine ${order_id} aggiornato a stato 'paid'.`);
@@ -280,11 +289,15 @@ router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) =>
             statusCode = 400;
             errorMessage = error.message;
             logError = false;
+        } else if (error.message.includes('Non sei autorizzato a effettuare il pagamento')) {
+            statusCode = 403;
+            errorMessage = error.message;
+            logError = false;
         }
 
         if (logError) console.error("Errore (non gestito specificamente) nella registrazione del pagamento:", error);
 
-        res.status(statusCode).json({ message: errorMessage });
+        res.status(statusCode).json({message: errorMessage});
     } finally {
         client.release();
     }
@@ -326,33 +339,33 @@ router.get('/order/:order_id', authenticateToken, async (req, res) => {
     const requestingUserRole = req.user.role;
 
     if (isNaN(orderId)) {
-        return res.status(400).json({ message: 'ID ordine non valido.' });
+        return res.status(400).json({message: 'ID ordine non valido.'});
     }
 
     try {
         // Recupero il pagamento e l'ID cliente dell'ordine associato
         const query = `
-             SELECT p.*, o.customer_id, o.status as order_status
-             FROM payments p
-             JOIN orders o ON p.order_id = o.order_id
-             WHERE p.order_id = $1`;
+            SELECT p.*, o.customer_id, o.status as order_status
+            FROM payments p
+                     JOIN orders o ON p.order_id = o.order_id
+            WHERE p.order_id = $1`;
         const result = await db.query(query, [orderId]);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ message: `Nessun pagamento trovato per l'ordine ${orderId}.` });
+            return res.status(404).json({message: `Nessun pagamento trovato per l'ordine ${orderId}.`});
         }
         const payment = result.rows[0];
 
         // Verifica permessi: Admin o Cliente proprietario dell'ordine
         if (requestingUserRole !== 'admin' && payment.customer_id !== requestingUserId) {
-            return res.status(403).json({ message: 'Accesso negato. Non puoi visualizzare questo pagamento.' });
+            return res.status(403).json({message: 'Accesso negato. Non puoi visualizzare questo pagamento.'});
         }
 
         res.json(payment);
 
     } catch (error) {
         console.error(`Errore nel recuperare il pagamento per l'ordine ${orderId}:`, error);
-        res.status(500).json({ message: 'Errore del server nel recuperare il pagamento.' });
+        res.status(500).json({message: 'Errore del server nel recuperare il pagamento.'});
     }
 });
 
@@ -387,25 +400,25 @@ router.get('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) 
     const paymentId = parseInt(req.params.id, 10);
 
     if (isNaN(paymentId)) {
-        return res.status(400).json({ message: 'ID pagamento non valido.' });
+        return res.status(400).json({message: 'ID pagamento non valido.'});
     }
 
     try {
         const query = `
-             SELECT p.*, o.status as order_status
-             FROM payments p
-             JOIN orders o ON p.order_id = o.order_id
-             WHERE p.payment_id = $1`;
+            SELECT p.*, o.status as order_status
+            FROM payments p
+                     JOIN orders o ON p.order_id = o.order_id
+            WHERE p.payment_id = $1`;
         const result = await db.query(query, [paymentId]);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Pagamento non trovato.' });
+            return res.status(404).json({message: 'Pagamento non trovato.'});
         }
 
         res.json(result.rows[0]);
     } catch (error) {
         console.error(`Errore nel recuperare il pagamento ${paymentId}:`, error);
-        res.status(500).json({ message: 'Errore del server nel recuperare il pagamento.' });
+        res.status(500).json({message: 'Errore del server nel recuperare il pagamento.'});
     }
 });
 
@@ -466,7 +479,7 @@ router.get('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) 
  *         description: Errore interno del server.
  */
 router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-    const { status, method, startDate, endDate, orderId, page = 1, limit = 10 } = req.query;
+    const {status, method, startDate, endDate, orderId, page = 1, limit = 10} = req.query;
 
     const offset = (page - 1) * limit;
     let queryParams = [];
@@ -474,27 +487,41 @@ router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => 
     let filters = [];
 
     // Filtri
-    if (status) { filters.push(`p.status = $${paramIndex++}`); queryParams.push(status); }
-    if (method) { filters.push(`p.payment_method = $${paramIndex++}`); queryParams.push(method); }
-    if (startDate) { filters.push(`p.payment_date >= $${paramIndex++}`); queryParams.push(startDate); }
-    if (endDate) { filters.push(`p.payment_date < ($${paramIndex++}::date + interval '1 day')`); queryParams.push(endDate); }
-    if (orderId) { filters.push(`p.order_id = $${paramIndex++}`); queryParams.push(orderId); }
+    if (status) {
+        filters.push(`p.status = $${paramIndex++}`);
+        queryParams.push(status);
+    }
+    if (method) {
+        filters.push(`p.payment_method = $${paramIndex++}`);
+        queryParams.push(method);
+    }
+    if (startDate) {
+        filters.push(`p.payment_date >= $${paramIndex++}`);
+        queryParams.push(startDate);
+    }
+    if (endDate) {
+        filters.push(`p.payment_date < ($${paramIndex++}::date + interval '1 day')`);
+        queryParams.push(endDate);
+    }
+    if (orderId) {
+        filters.push(`p.order_id = $${paramIndex++}`);
+        queryParams.push(orderId);
+    }
 
     const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
     try {
-        // Query
-        const countQuery = `SELECT COUNT(*) FROM payments p ${whereClause}`;
+        const countQuery = `SELECT COUNT(*)
+                            FROM payments p ${whereClause}`;
         const countResult = await db.query(countQuery, queryParams);
         const totalItems = parseInt(countResult.rows[0].count, 10);
         const totalPages = Math.ceil(totalItems / limit);
 
-        // Query
         const dataQuery = `
             SELECT p.*, o.status as order_status
             FROM payments p
-            JOIN orders o ON p.order_id = o.order_id
-            ${whereClause}
+                     JOIN orders o ON p.order_id = o.order_id
+                ${whereClause}
             ORDER BY p.payment_date DESC
             LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
         queryParams.push(limit, offset);
@@ -510,7 +537,7 @@ router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => 
 
     } catch (error) {
         console.error("Errore nel recuperare i pagamenti:", error);
-        res.status(500).json({ message: 'Errore del server nel recuperare i pagamenti.' });
+        res.status(500).json({message: 'Errore del server nel recuperare i pagamenti.'});
     }
 });
 
