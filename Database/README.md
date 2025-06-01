@@ -1,98 +1,150 @@
 # Database - Artigianato Online
-- Postgres (AKA PostgreSQL)
 
-# IGNORARE QUESTI PASSAGGI! SEGUIRE LA DOCUMENTAZIONE NELLA WIKI!
+> Database PostgreSQL per la piattaforma di e-commerce artigianale, configurato automaticamente via Docker.
 
-### Installazione PostgreSQL (VPS Azure - Student Plan)
+## Indice
 
-```BASH
-sudo apt update && sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql.service
+- [Schema Database](#️schema-database)
+- [Struttura Tabelle](#struttura-tabelle)
+- [Funzioni e Trigger](#funzioni-e-trigger)
 
-# Creare un utente (per la connessione al DB)
-sudo -u postgres psql
-CREATE USER artigianato WITH PASSWORD '<password>'; # Sostituisci <password> con una password sicura e salvarla in un file .env
-\q
+---
 
-# SSL PostgreSQL
-sudo snap install core; sudo snap refresh core
-sudo snap install --classic certbot
-sudo ln -s /snap/bin/certbot /usr/bin/certbot
+## Schema Database
 
-# Creare A Record DNS su Cloudflare con Name: artigianatopsql e Content: <IP Pubblico VPS> e poi procedere
-sudo certbot certonly --standalone -d artigianatopsql.dominio.tld # Sostituire dominio.tld con il proprio dominio
+Il database è progettato per supportare un marketplace di prodotti artigianali con le seguenti entità principali:
 
-sudo -u postgres psql -U postgres -c 'SHOW data_directory'
-sudo nano /etc/letsencrypt/renewal-hooks/deploy/postgresql.deploy
-```
-
-Inserire il seguente contenuto, sostituendo DOMAIN=artigianatopsql.dominio.tld con il proprio dominio, e DATA_DIR con il percorso di postgres (Solitamenmte basta cambiare "14" con la versione di postgres installata):
-```TXT
- #!/bin/bash
- umask 0177
- DOMAIN=artigianatopsql.dominio.tld
- DATA_DIR=/var/lib/postgresql/14/main
- cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem $DATA_DIR/server.crt
- cp /etc/letsencrypt/live/$DOMAIN/privkey.pem $DATA_DIR/server.key
- chown postgres:postgres $DATA_DIR/server.crt $DATA_DIR/server.key
-```
-CTRL+X per uscire, Y per salvare e invio per confermare.
-
-```BASH
-sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/postgresql.deploy
-
-# Aprire config postgres, cambiare "14" con la versione di postgres installata
-sudo nano /etc/postgresql/14/main/postgresql.conf
-```
-Modificare le opzioni SSL (in basso) come segue:
-```TXT
- ssl = on  
- ssl_cert_file = 'server.crt'  
- ssl_key_file = 'server.key'  
- ssl_prefer_server_ciphers = on # Commentata, togliere il commento
- ```
-
-Abilitare listen_addresses (prima di SSL, in alto), e mettere '*' e togliere commento:
-```TXT
- listen_addresses = '*'
-```
-CTRL+X per uscire, Y per salvare e invio per confermare.
-
-Modificare il file pg_hba.conf (sostituire 14 con la versione di postgres installata):
-```BASH
-sudo nano /etc/postgresql/14/main/pg_hba.conf
-```
-
-Aggiungere la seguente riga in fondo al file:
-```TXT
-hostssl all all 0.0.0.0/0 md5
-```
-CTRL+X per uscire, Y per salvare e invio per confermare.
-
-Rinnovare i certificati per attivare l'hook, e riavviare postgres:
-```BASH
-sudo certbot renew --force-renewal
-sudo service postgresql restart
-```
-
-Se si disattiva il proxy di Cloudflare (la nuvoletta arancione) è possibile connettersi al Database direttamente con il dominio
-creato per il certificato SSL, altrimenti si dovrà usare l'IP pubblico della VPS.
-
-Si consiglia la creazione un utente (eg: artigianoto) con password, con permesso di creazione database,
-sarà utile per gli script del Backend:
-```BASH
-sudo -u postgres psql
-CREATE USER artigianato WITH PASSWORD '<password>'; # Sostituire <password> con password sicura e salvarla in un file .env
-ALTER USER artigianato CREATEDB;
-```
-
-# DB:
-
-Schema:
 ![Schema DB](img/schema.png)
 
-Creazione:
-```SQL
+> **Nota:** Il database viene configurato automaticamente al primo avvio tramite Docker Compose.
+
+---
+
+## Struttura Tabelle
+
+### Tabella `users`
+Gestisce tutti gli utenti del sistema (artigiani, clienti, admin).
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `user_id` | SERIAL | Chiave primaria |
+| `role` | VARCHAR(10) | Ruolo: 'artigiano', 'cliente', 'admin' |
+| `email` | VARCHAR(255) | Email univoca |
+| `password_hash` | VARCHAR(255) | Password hashata |
+| `full_name` | VARCHAR(150) | Nome completo |
+| `shop_name` | VARCHAR(150) | Nome negozio (artigiani) |
+| `shop_description` | TEXT | Descrizione negozio |
+| `address` | TEXT | Indirizzo |
+| `phone_number` | VARCHAR(30) | Numero di telefono |
+| `is_active` | BOOLEAN | Account attivo |
+
+### Tabella `categories`
+Gestisce le categorie di prodotti con supporto per sottocategorie.
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `category_id` | SERIAL | Chiave primaria |
+| `name` | VARCHAR(100) | Nome categoria (univoco) |
+| `description` | TEXT | Descrizione categoria |
+| `parent_category_id` | INTEGER | Riferimento alla categoria padre |
+
+### Tabella `products`
+Contiene tutti i prodotti disponibili sulla piattaforma.
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `product_id` | SERIAL | Chiave primaria |
+| `artisan_id` | INTEGER | Riferimento all'artigiano |
+| `category_id` | INTEGER | Riferimento alla categoria |
+| `sku` | VARCHAR(100) | Codice prodotto univoco |
+| `name` | VARCHAR(255) | Nome prodotto |
+| `description` | TEXT | Descrizione dettagliata |
+| `price` | NUMERIC(10,2) | Prezzo (≥ 0) |
+| `stock_quantity` | INTEGER | Quantità disponibile |
+| `image_url` | VARCHAR(500) | URL immagine prodotto |
+| `is_active` | BOOLEAN | Prodotto attivo |
+
+### Tabella `orders`
+Gestisce gli ordini dei clienti.
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `order_id` | SERIAL | Chiave primaria |
+| `customer_id` | INTEGER | Riferimento al cliente |
+| `order_date` | TIMESTAMP | Data ordine |
+| `status` | VARCHAR(20) | Stato: 'pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded' |
+| `total_amount` | NUMERIC(12,2) | Importo totale |
+| `shipping_address` | TEXT | Indirizzo di spedizione |
+| `billing_address` | TEXT | Indirizzo di fatturazione |
+| `shipping_method` | VARCHAR(100) | Metodo di spedizione |
+| `tracking_number` | VARCHAR(100) | Numero di tracking |
+| `notes` | TEXT | Note aggiuntive |
+
+### Tabella `order_items`
+Dettagli degli articoli per ogni ordine.
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `order_item_id` | SERIAL | Chiave primaria |
+| `order_id` | INTEGER | Riferimento all'ordine |
+| `product_id` | INTEGER | Riferimento al prodotto |
+| `quantity` | INTEGER | Quantità ordinata (> 0) |
+| `price_per_unit` | NUMERIC(10,2) | Prezzo unitario |
+| `artisan_id` | INTEGER | Riferimento all'artigiano |
+
+### Tabella `payments`
+Gestisce i pagamenti degli ordini.
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| `payment_id` | SERIAL | Chiave primaria |
+| `order_id` | INTEGER | Riferimento all'ordine (univoco) |
+| `payment_date` | TIMESTAMP | Data pagamento |
+| `amount` | NUMERIC(12,2) | Importo pagamento |
+| `payment_method` | VARCHAR(50) | Metodo: 'credit_card', 'paypal', 'bank_transfer', 'other' |
+| `transaction_id` | VARCHAR(255) | ID transazione (univoco) |
+| `status` | VARCHAR(20) | Stato: 'pending', 'completed', 'failed', 'refunded' |
+
+---
+
+## Funzioni e Trigger
+
+### Funzione per Timestamp Automatico
+
+```sql
+-- Funzione per aggiornare automaticamente updated_at
+CREATE OR REPLACE FUNCTION trigger_set_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Trigger per Aggiornamento Automatico
+
+I seguenti trigger aggiornano automaticamente il campo `updated_at`:
+
+- `set_timestamp_users` - Tabella users
+- `set_timestamp_categories` - Tabella categories
+- `set_timestamp_products` - Tabella products
+- `set_timestamp_orders` - Tabella orders
+- `set_timestamp_payments` - Tabella payments
+
+---
+
+## Script Creazione Database
+
+<details>
+<summary><strong> Clicca per visualizzare lo script completo</strong></summary>
+
+```sql
+-- ================================
+-- SCRIPT CREAZIONE DATABASE
+-- Artigianato Online
+-- ================================
+
 -- Tabelle --
 
 -- Utenti
@@ -178,7 +230,6 @@ CREATE TABLE payments (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-    
 -- Funzioni -- 
 
 -- Funzione per aggiornare updated_at
@@ -189,8 +240,7 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-    
-   
+
 -- Triggers --
 
 -- Triggers per aggiornare updated_at
@@ -219,3 +269,5 @@ BEFORE UPDATE ON payments
 FOR EACH ROW
 EXECUTE FUNCTION trigger_set_timestamp();
 ```
+
+</details>
