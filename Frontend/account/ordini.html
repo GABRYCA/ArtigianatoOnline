@@ -23,6 +23,8 @@
         const urlBaseApi = "";
         let datiOrdineGlobali = null;
         let datiOrdineGrezzi = null;
+        let datiPagamentoCaricati = false;
+        let datiPagamentoGlobali = null;
 
         $(document).ready(function () {
             const parametriUrl = new URLSearchParams(window.location.search);
@@ -136,10 +138,15 @@
                 }
             });
 
-            // Reset della validazione quando si cambia metodo di pagamento
             $('#payment-method-tabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (event) {
                 $('#payment-method-tabs-content .form-control').removeClass('is-valid is-invalid');
                 $('#payment-feedback').empty();
+            });
+
+            $('#payment-tab').on('shown.bs.tab', function () {
+                if (!datiPagamentoCaricati && datiOrdineGrezzi) {
+                    caricaDatiPagamento(datiOrdineGrezzi.order_id);
+                }
             });
         });
 
@@ -186,9 +193,9 @@
          * Recupera i dati dell'ordine tramite API
          * @param {string} idOrdine - ID dell'ordine da recuperare
          * @param {string} token - Token di autenticazione
-         */
-        function recuperaDatiOrdine(idOrdine, token) {
+         */        function recuperaDatiOrdine(idOrdine, token) {
             mostraStatoCaricamento(true);
+            resetDatiPagamento();
 
             $.ajax({
                 url: `${urlBaseApi}/api/orders/${idOrdine}`,
@@ -221,6 +228,113 @@
         }
 
         /**
+         * Carica i dati di pagamento per l'ordine specificato
+         * @param {number} idOrdine - ID dell'ordine per cui recuperare i dati di pagamento
+         */
+        function caricaDatiPagamento(idOrdine) {
+            const tokenAutenticazione = localStorage.getItem('sessionToken');
+            
+            $('#payment-method').text('Caricamento...');
+            $('#payment-status').text('Caricamento...');
+            $('#payment-total').text('Caricamento...');
+
+            $.ajax({
+                url: `${urlBaseApi}/api/payments/order/${idOrdine}`,
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${tokenAutenticazione}`
+                },
+                success: function (datiPagamento) {
+                    datiPagamentoGlobali = datiPagamento;
+                    datiPagamentoCaricati = true;
+                    aggiornaPagamentoDati(datiPagamento);
+                },                error: function (rispostaHttp, testoStato, errore) {
+                    if (rispostaHttp.status === 404) {
+                        console.info('Nessun pagamento registrato per questo ordine');
+                        if (datiOrdineGrezzi && datiOrdineGrezzi.status === 'pending') {
+                            $('#payment-method').text('In attesa');
+                            $('#payment-status').text('In attesa di pagamento').removeClass().addClass('text-warning');
+                            $('#payment-total').text('€ 0.00');
+                        } else {
+                            aggiornaPagamentoDati(null);
+                        }
+                    } else {
+                        console.error('Errore nel caricamento dei dati di pagamento:', errore);
+                        $('#payment-method').text('Errore di caricamento');
+                        $('#payment-status').text('Errore').removeClass().addClass('text-danger');
+                        $('#payment-total').text('N/D');
+                    }
+                    datiPagamentoCaricati = true;
+                }
+            });
+        }
+
+        /**
+         * Aggiorna l'interfaccia della tab pagamento con i dati ricevuti
+         * @param {Object|null} datiPagamento - Dati del pagamento o null se non disponibili
+         */
+        function aggiornaPagamentoDati(datiPagamento) {
+            if (datiPagamento) {
+                const mappaMetodiPagamento = {
+                    'credit_card': 'Carta di Credito',
+                    'paypal': 'PayPal',
+                    'bank_transfer': 'Bonifico Bancario',
+                    'other': 'Altro'
+                };
+
+                const mappaStatiPagamento = {
+                    'pending': { text: 'In Attesa', color: 'warning' },
+                    'completed': { text: 'Completato', color: 'success' },
+                    'failed': { text: 'Fallito', color: 'danger' },
+                    'refunded': { text: 'Rimborsato', color: 'info' }
+                };
+
+                const metodoPagamento = mappaMetodiPagamento[datiPagamento.payment_method] || datiPagamento.payment_method || 'N/D';
+                const infoStato = mappaStatiPagamento[datiPagamento.status] || { text: datiPagamento.status || 'N/D', color: 'muted' };
+
+                $('#payment-method').text(metodoPagamento);
+                $('#payment-status').text(infoStato.text).removeClass().addClass(`text-${infoStato.color}`);
+                $('#payment-total').text(formattaPrezzo(parseFloat(datiPagamento.amount)));
+
+                if (datiPagamento.transaction_id) {
+                    $('.payment-transaction-info').remove();
+                    
+                    const infoTransazione = $(`
+                        <div class="payment-transaction-info d-flex justify-content-between small mt-2 pt-2 border-top">
+                            <span class="text-muted">ID Transazione</span>
+                            <span class="font-monospace small">${datiPagamento.transaction_id}</span>
+                        </div>
+                    `);
+                    $('#payment-total').parent().after(infoTransazione);
+                }
+
+                if (datiPagamento.payment_date) {
+                    $('.payment-date-info').remove();
+                    
+                    const dataFormattata = formattaData(datiPagamento.payment_date, true);
+                    const infoData = $(`
+                        <div class="payment-date-info d-flex justify-content-between small mt-1">
+                            <span class="text-muted">Data Pagamento</span>
+                            <span>${dataFormattata}</span>
+                        </div>
+                    `);
+                    
+                    const ultimoElemento = $('.payment-transaction-info').length > 0 ?
+                                         $('.payment-transaction-info') : 
+                                         $('#payment-total').parent();
+                    ultimoElemento.before(infoData);
+                }
+
+            } else {
+                $('#payment-method').text('N/D');
+                $('#payment-status').text('N/D').removeClass().addClass('text-muted');
+                $('#payment-total').text('€ 0.00');
+                
+                $('.payment-transaction-info, .payment-date-info').remove();
+            }
+        }
+
+        /**
          * Mappa i dati grezzi dell'ordine in un formato strutturato per la visualizzazione
          * @param {Object} datiGrezzi - Dati grezzi ricevuti dall'API
          * @returns {Object} Dati dell'ordine mappati e formattati
@@ -235,26 +349,8 @@
                 delivered: {text: "Consegnato", progress: 100, icon: 'bi-check-circle-fill', color: 'success'},
                 cancelled: {text: "Annullato", progress: 0, icon: 'bi-x-circle-fill', color: 'danger'},
                 refunded: {text: "Rimborsato", progress: 0, icon: 'bi-arrow-counterclockwise', color: 'secondary'},
-                default: {text: datiGrezzi.status, progress: 50, icon: 'bi-question-circle', color: 'secondary'}
-            };
+                default: {text: datiGrezzi.status, progress: 50, icon: 'bi-question-circle', color: 'secondary'}            };
             const infoStatoCorrente = mappaStati[datiGrezzi.status] || mappaStati.default;
-            const mappaStatiPagamento = {
-                pending: {text: 'In attesa', color: 'warning'},
-                completed: {text: 'Completato', color: 'success'},
-                failed: {text: 'Fallito', color: 'danger'},
-                refunded: {text: 'Rimborsato', color: 'info'},
-                default: {text: datiGrezzi.payment?.status || 'N/D', color: 'muted'}
-            };
-            const infoStatoPagamento = datiGrezzi.payment ? (mappaStatiPagamento[datiGrezzi.payment.status] || mappaStatiPagamento.default) : mappaStatiPagamento.default;
-
-            const mappaMetodiPagamento = {
-                credit_card: 'Carta di Credito',
-                paypal: 'PayPal',
-                bank_transfer: 'Bonifico Bancario',
-                other: 'Altro',
-                default: datiGrezzi.payment?.payment_method || 'N/D'
-            };
-            const testoMetodoPagamento = datiGrezzi.payment ? (mappaMetodiPagamento[datiGrezzi.payment.payment_method] || mappaMetodiPagamento.default) : mappaMetodiPagamento.default;
 
             return {
                 id: datiGrezzi.order_id,
@@ -277,15 +373,8 @@
                     method: traduciMetodoSpedizione(datiGrezzi.shipping_method),
                     address: datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito'],
                     trackingNumber: datiGrezzi.tracking_number || 'Non disponibile',
-                },
-                billing: {
+                },                billing: {
                     address: datiGrezzi.billing_address ? datiGrezzi.billing_address.split(',').map(p => p.trim()) : (datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito']),
-                },
-                payment: {
-                    total: datiGrezzi.total_amount,
-                    status: infoStatoPagamento.text,
-                    statusColor: infoStatoPagamento.color,
-                    method: testoMetodoPagamento,
                 },
                 customer: {
                     name: datiGrezzi.customer_full_name || `Cliente ID: ${datiGrezzi.customer_id}`,
@@ -351,13 +440,8 @@
 
             const indirizzoFatturazione = $('#billing-address');
             indirizzoFatturazione.empty();
-            datiOrdine.billing.address.forEach(riga => indirizzoFatturazione.append(`<p class="mb-0">${riga}</p>`));
-            $('#billing-order-date').text(datiOrdine.date);
+            datiOrdine.billing.address.forEach(riga => indirizzoFatturazione.append(`<p class="mb-0">${riga}</p>`));            $('#billing-order-date').text(datiOrdine.date);
             $('#billing-order-id').text(datiOrdine.id);
-
-            $('#payment-method').text(datiOrdine.payment.method);
-            $('#payment-status').text(datiOrdine.payment.status).removeClass().addClass(`text-${datiOrdine.payment.statusColor}`);
-            $('#payment-total').text(`€ ${datiOrdine.payment.total}`);
 
             $('#summary-order-id').text(datiOrdine.id);
             $('#summary-date').text(datiOrdine.date);
@@ -366,7 +450,7 @@
 
             $('#summary-customer-name').text(datiOrdine.customer.name);
             $('#summary-customer-email').text(datiOrdine.customer.email);
-            $('#summary-total').text(`€ ${datiOrdine.payment.total}`);
+            $('#summary-total').text(formattaPrezzo(parseFloat(datiOrdineGrezzi.total_amount)));
 
             gestisciPulsantePagaNora(datiOrdine);
         }
@@ -381,7 +465,7 @@
                 'standard': 'Spedizione standard',
                 'express': 'Spedizione espressa',
                 'free': 'Spedizione gratuita',
-                'Spedizione standard': 'Spedizione standard', // Per compatibilità con valori già salvati
+                'Spedizione standard': 'Spedizione standard',
                 'Spedizione espressa': 'Spedizione espressa',
                 'Spedizione gratuita': 'Spedizione gratuita'
             };
@@ -516,7 +600,7 @@
         async function simulaElaborazionePagamento(metodoPagamento, importo) {
             await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
 
-            const successo = Math.random() > 0.05; // 95% di successo
+            const successo = Math.random() > 0.05;
 
             if (!successo) {
                 const errori = [
@@ -677,6 +761,20 @@
                 console.error("Errore formattazione data:", stringaData, erroreFormattazione);
                 return stringaData;
             }
+        }
+
+        /**
+         * Resetta lo stato dei dati di pagamento quando si carica un nuovo ordine
+         */
+        function resetDatiPagamento() {
+            datiPagamentoCaricati = false;
+            datiPagamentoGlobali = null;
+            
+            $('#payment-method').text('N/D');
+            $('#payment-status').text('N/D').removeClass().addClass('text-muted');
+            $('#payment-total').text('€ 0.00');
+            
+            $('.payment-transaction-info, .payment-date-info').remove();
         }
     </script>
 </head>
