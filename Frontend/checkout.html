@@ -19,7 +19,8 @@
 
     <!-- JS -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
-            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>    <script>
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script>
         const urlBaseApi = "";
         const tipoStorage = localStorage;
         const chiaveCarrello = 'cart';
@@ -43,7 +44,8 @@
             console.error("Errore nel parsing dei dati utente:", e);
             localStorage.removeItem(chiaveDatiUtente);
             localStorage.removeItem(chiaveToken);
-        }        $(document).ready(function () {
+        }
+        $(document).ready(function () {
 
             const riepilogoArticoliCarrello = $('#cart-summary-items');
             const elementoSubtotale = $('#subtotal');
@@ -56,9 +58,8 @@
             const minimoSpedizioneGratuita = 100;
 
             let subtotaleCorrente = 0;
-            let costoSpedizioneCorrente = 0;            /**
-             * Popola il riepilogo del carrello
-             */
+            let costoSpedizioneCorrente = 0;
+
             function popolaRiepilogoCarrello() {
                 riepilogoArticoliCarrello.empty();
                 subtotaleCorrente = 0;
@@ -66,7 +67,8 @@
 
                 if (articoli.length === 0) {
                     riepilogoArticoliCarrello.html('<p class="text-center text-muted">Il tuo carrello è vuoto.</p>');
-                    pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');                    disabilitaCampiForm(true);
+                    pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');
+                    disabilitaCampiForm(true);
                     pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');
                     return;
                 }
@@ -99,7 +101,8 @@
                         listaArticoli.append(elementoErrore);
                     }
                 });
-                riepilogoArticoliCarrello.append(listaArticoli);                disabilitaCampiForm(false);
+                riepilogoArticoliCarrello.append(listaArticoli);
+                disabilitaCampiForm(false);
                 aggiornaTotale();
             }
 
@@ -117,7 +120,8 @@
                         $('#address').val(datiUtente.address);
                     }
                     $('#bank-customer-name').text(datiUtente.full_name || '[Nome Cognome]');
-                } else {                    $('#bank-customer-name').text('[Nome Cognome]');
+                } else {
+                    $('#bank-customer-name').text('[Nome Cognome]');
                     mostraAlert('Sembra che tu non sia loggato. Per procedere, <a href="/login.html">accedi</a> o <a href="/register.html">registrati</a>.', 'info');
                     disabilitaCampiForm(true);
                     pulsanteCompletaOrdine.prop('disabled', true).text('Accedi per continuare');
@@ -156,7 +160,9 @@
                 elementoSubtotale.text(formattaPrezzo(subtotaleCorrente));
                 elementoCostoSpedizione.text(formattaPrezzo(costoSpedizioneCorrente));
                 elementoPrezzoTotale.text(formattaPrezzo(subtotaleCorrente + costoSpedizioneCorrente));
-            }            inputOpzioniSpedizione.on('change', function () {
+            }
+
+            inputOpzioniSpedizione.on('change', function () {
                 aggiornaTotale();
             });
 
@@ -175,7 +181,6 @@
                     pulsanteCompletaOrdine.prop('disabled', true).text('Carrello Vuoto');
                     return;
                 }
-
                 if (!this.checkValidity()) {
                     event.stopPropagation();
                     $(this).addClass('was-validated');
@@ -187,6 +192,15 @@
                     }
                     return;
                 }
+
+                const metodoPagamento = $('#payment-tabs .nav-link.active').data('payment-method') || 'credit_card';
+                if (metodoPagamento !== 'bank_transfer' && !validaDatiPagamento(metodoPagamento)) {
+                    const messaggioMetodo = metodoPagamento === 'credit_card' ? 'carta di credito' : (metodoPagamento === 'paypal' ? 'PayPal (solo email richiesta)' : 'pagamento selezionato');
+                    mostraAlert(`Per favore, inserisci tutti i dati richiesti per il pagamento con ${messaggioMetodo}.`, "warning");
+                    $('#payment-tabs')[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+                    return;
+                }
+
                 $(this).addClass('was-validated');
 
                 pulsanteCompletaOrdine.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Elaborazione...');
@@ -194,11 +208,11 @@
                 const articoliCarrello = Object.values(datiCarrello).map(articolo => ({
                     product_id: articolo.id,
                     quantity: articolo.quantity
-                }));                const indirizzoSpedizione = $('#address').val().trim();
+                }));
+                const indirizzoSpedizione = $('#address').val().trim();
                 const spedizioneSelezionata = inputOpzioniSpedizione.filter(':checked');
-                const valoreMetodoSpedizione = spedizioneSelezionata.val(); // Usa il value invece del testo del label
+                const valoreMetodoSpedizione = spedizioneSelezionata.val();
                 const note = $('#notes').val().trim();
-                const metodoPagamento = $('#payment-tabs .nav-link.active').data('payment-method') || 'card';
 
                 const datiOrdine = {
                     customer_id: datiUtente.user_id,
@@ -210,7 +224,8 @@
                     total_amount: subtotaleCorrente + costoSpedizioneCorrente
                 };
 
-                let datiOrdineCreato = null;                try {
+                let datiOrdineCreato = null;
+                try {
                     console.log("Invio Payload Ordine:", JSON.stringify(datiOrdine, null, 2));
                     const rispostaOrdine = await fetch(`${urlBaseApi}/api/orders`, {
                         method: 'POST',
@@ -240,13 +255,33 @@
                     mostraAlert(`Errore durante la creazione dell'ordine: ${error.message || 'Si è verificato un problema.'}`, "danger");
                     pulsanteCompletaOrdine.prop('disabled', false).text('Completa Ordine');
                     return;
-                }                const importoTotale = subtotaleCorrente + costoSpedizioneCorrente;
+                }
+                const importoTotale = subtotaleCorrente + costoSpedizioneCorrente;
+
+                let resultSimulazione = null;
+                if (metodoPagamento !== 'bank_transfer') {
+                    try {
+                        console.log(`Simulazione elaborazione pagamento ${metodoPagamento} per importo €${importoTotale}...`);
+                        pulsanteCompletaOrdine.text('Elaborazione pagamento...');
+
+                        resultSimulazione = await simulaElaborazionePagamento(metodoPagamento, importoTotale);
+                        console.log('Simulazione completata:', resultSimulazione);
+
+                    } catch (errorePagamento) {
+                        console.error("Errore simulazione pagamento:", errorePagamento);
+                        mostraAlert(`Pagamento non riuscito: ${errorePagamento.message}. Riprova con un altro metodo di pagamento.`, "danger");
+                        pulsanteCompletaOrdine.prop('disabled', false).text('Riprova Pagamento');
+                        return;
+                    }
+                }
+
                 const datiPagamento = {
                     order_id: datiOrdineCreato.order_id,
                     amount: importoTotale,
                     payment_method: metodoPagamento,
-                    status: (metodoPagamento === 'bank') ? 'pending' : 'completed',
-                    payment_date: new Date().toISOString()
+                    status: (metodoPagamento === 'bank_transfer') ? 'pending' : 'completed',
+                    payment_date: new Date().toISOString(),
+                    ...(resultSimulazione?.transactionId && {transaction_id: resultSimulazione.transactionId})
                 };
 
                 try {
@@ -270,7 +305,8 @@
                         mostraAlert(`L'ordine #${datiOrdineCreato.order_id} è stato creato, ma si è verificato un errore durante la registrazione del pagamento: ${messaggioErrore}. Contatta l'assistenza o riprova.`, "warning");
                         pulsanteCompletaOrdine.prop('disabled', false).text('Riprova Pagamento?');
                         return;
-                    }                    const esitoPagamento = await rispostaPagamento.json();
+                    }
+                    const esitoPagamento = await rispostaPagamento.json();
                     console.log("Risposta Pagamento:", esitoPagamento);
 
                     tipoStorage.removeItem(chiaveCarrello);
@@ -286,19 +322,234 @@
                     return;
                 }
             });
-
             $('#payment-tabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (event) {
+                resetValidazionePagamento();
+            });
 
-            });            // Inizializzazione
+            $('#card-number').on('input', function () {
+                let valore = $(this).val().replace(/\s/g, '').replace(/[^0-9]/g, '');
+                let valoreFormattato = valore.match(/.{1,4}/g)?.join(' ') || valore;
+                if (valoreFormattato.length > 19) valoreFormattato = valoreFormattato.substring(0, 19);
+                $(this).val(valoreFormattato);
+
+                const numeroSenzaSpazi = valore;
+                if (numeroSenzaSpazi.length === 16) {
+                    $(this).removeClass('is-invalid').addClass('is-valid');
+                } else if (numeroSenzaSpazi.length > 0) {
+                    $(this).removeClass('is-valid').addClass('is-invalid');
+                } else {
+                    $(this).removeClass('is-valid is-invalid');
+                }
+            });
+
+            $('#card-expiry').on('input', function () {
+                let valore = $(this).val().replace(/[^0-9]/g, '');
+                if (valore.length >= 2) {
+                    valore = valore.substring(0, 2) + '/' + valore.substring(2, 4);
+                }
+                $(this).val(valore);
+
+                if (valore.length === 5) {
+                    const [mese, anno] = valore.split('/');
+                    const meseNum = parseInt(mese);
+                    const annoNum = parseInt(anno);
+                    const annoCorrente = new Date().getFullYear() % 100;
+                    const meseCorrente = new Date().getMonth() + 1;
+
+                    if (meseNum >= 1 && meseNum <= 12 && annoNum >= annoCorrente &&
+                        !(annoNum === annoCorrente && meseNum < meseCorrente)) {
+                        $(this).removeClass('is-invalid').addClass('is-valid');
+                    } else {
+                        $(this).removeClass('is-valid').addClass('is-invalid');
+                    }
+                } else if (valore.length > 0) {
+                    $(this).removeClass('is-valid').addClass('is-invalid');
+                } else {
+                    $(this).removeClass('is-valid is-invalid');
+                }
+            });
+
+            $('#card-cvv').on('input', function () {
+                let valore = $(this).val().replace(/[^0-9]/g, '');
+                if (valore.length > 4) valore = valore.substring(0, 4);
+                $(this).val(valore);
+
+                if (valore.length >= 3) {
+                    $(this).removeClass('is-invalid').addClass('is-valid');
+                } else if (valore.length > 0) {
+                    $(this).removeClass('is-valid').addClass('is-invalid');
+                } else {
+                    $(this).removeClass('is-valid is-invalid');
+                }
+            });
+
+            $('#card-name').on('input', function () {
+                const valore = $(this).val().trim();
+                if (valore.length >= 3 && valore.includes(' ')) {
+                    $(this).removeClass('is-invalid').addClass('is-valid');
+                } else if (valore.length > 0) {
+                    $(this).removeClass('is-valid').addClass('is-invalid');
+                } else {
+                    $(this).removeClass('is-valid is-invalid');
+                }
+            });
+            $('#paypal-email').on('input', function () {
+                const valore = $(this).val().trim();
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (emailRegex.test(valore)) {
+                    $(this).removeClass('is-invalid').addClass('is-valid');
+                } else if (valore.length > 0) {
+                    $(this).removeClass('is-valid').addClass('is-invalid');
+                } else {
+                    $(this).removeClass('is-valid is-invalid');
+                }
+            });
+
             popolaRiepilogoCarrello();
             popolaDatiUtente();
-        });        /**
+        });
+
+        /**
          * Disabilita/Riabilita campi form (tranne riepilogo)
          * @param {boolean} disable - Se true disabilita i campi, se false li riabilita
          */
         function disabilitaCampiForm(disable) {
             $('#checkout-form .card:not(:last-of-type) :input').prop('disabled', disable);
-        }        /**
+        }
+
+        /**
+         * Resetta la validazione dei campi di pagamento
+         */
+        function resetValidazionePagamento() {
+            $('#payment-tabs-content .form-control').removeClass('is-valid is-invalid');
+        }
+
+        /**
+         * Valida i dati di pagamento in base al metodo selezionato
+         * @param {string} metodoPagamento - Il metodo di pagamento selezionato
+         * @returns {boolean} - True se la validazione è passata
+         */
+        function validaDatiPagamento(metodoPagamento) {
+            let valido = true;
+
+            if (metodoPagamento === 'credit_card') {
+                const numeroCartaElement = $('#card-number');
+                const nomeCartaElement = $('#card-name');
+                const scadenzaElement = $('#card-expiry');
+                const cvvElement = $('#card-cvv');
+
+                const numeroCarta = numeroCartaElement.val().replace(/\s/g, '');
+                const nomeCarta = nomeCartaElement.val().trim();
+                const scadenza = scadenzaElement.val();
+                const cvv = cvvElement.val();
+
+                if (numeroCarta.length !== 16 || !/^\d{16}$/.test(numeroCarta)) {
+                    numeroCartaElement.addClass('is-invalid').removeClass('is-valid');
+                    valido = false;
+                } else {
+                    numeroCartaElement.addClass('is-valid').removeClass('is-invalid');
+                }
+
+                if (nomeCarta.length < 3 || !nomeCarta.includes(' ')) {
+                    nomeCartaElement.addClass('is-invalid').removeClass('is-valid');
+                    valido = false;
+                } else {
+                    nomeCartaElement.addClass('is-valid').removeClass('is-invalid');
+                }
+
+                if (scadenza.length !== 5 || !/^\d{2}\/\d{2}$/.test(scadenza)) {
+                    scadenzaElement.addClass('is-invalid').removeClass('is-valid');
+                    valido = false;
+                } else {
+                    const [mese, anno] = scadenza.split('/');
+                    const meseNum = parseInt(mese);
+                    const annoNum = parseInt(anno);
+                    const annoCorrente = new Date().getFullYear() % 100;
+                    const meseCorrente = new Date().getMonth() + 1;
+
+                    if (meseNum < 1 || meseNum > 12 || annoNum < annoCorrente ||
+                        (annoNum === annoCorrente && meseNum < meseCorrente)) {
+                        scadenzaElement.addClass('is-invalid').removeClass('is-valid');
+                        valido = false;
+                    } else {
+                        scadenzaElement.addClass('is-valid').removeClass('is-invalid');
+                    }
+                }
+
+                if (cvv.length < 3 || cvv.length > 4 || !/^\d{3,4}$/.test(cvv)) {
+                    cvvElement.addClass('is-invalid').removeClass('is-valid');
+                    valido = false;
+                } else {
+                    cvvElement.addClass('is-valid').removeClass('is-invalid');
+                }
+            } else if (metodoPagamento === 'paypal') {
+                const emailElement = $('#paypal-email');
+
+                const email = emailElement.val().trim();
+
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    emailElement.addClass('is-invalid').removeClass('is-valid');
+                    valido = false;
+                } else {
+                    emailElement.addClass('is-valid').removeClass('is-invalid');
+                }
+            }
+
+            return valido;
+        }
+
+        /**
+         * Simula l'elaborazione del pagamento e genera un transaction_id
+         * @param {string} metodoPagamento - Il metodo di pagamento
+         * @param {number} importo - L'importo del pagamento
+         * @returns {Promise} - Promise che risolve con i dati del pagamento simulato
+         */
+        async function simulaElaborazionePagamento(metodoPagamento, importo) {
+            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+
+            const successo = Math.random() > 0.05;
+
+            if (!successo) {
+                const errori = [
+                    'Carta di credito rifiutata',
+                    'Fondi insufficienti',
+                    'Carta scaduta',
+                    'Credenziali PayPal non valide',
+                    'Servizio temporaneamente non disponibile'
+                ];
+                const erroreSimulato = errori[Math.floor(Math.random() * errori.length)];
+                throw new Error(erroreSimulato);
+            }
+
+            let transactionId;
+            const timestamp = Date.now();
+            const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+            switch (metodoPagamento) {
+                case 'credit_card':
+                    transactionId = `CC_${timestamp}_${random}`;
+                    break;
+                case 'paypal':
+                    transactionId = `PAYPAL_${timestamp}_${random}`;
+                    break;
+                case 'bank_transfer':
+                    transactionId = `BANK_${timestamp}_${random}`;
+                    break;
+                default:
+                    transactionId = `TXN_${timestamp}_${random}`;
+            }
+
+            return {
+                transactionId: transactionId,
+                status: 'completed',
+                paymentDate: new Date().toISOString(),
+                amount: importo,
+                method: metodoPagamento
+            };
+        }
+
+        /**
          * Formatta un prezzo in formato euro
          * @param {number} prezzo - Il prezzo da formattare
          * @returns {string} Il prezzo formattato (es. "€12,50")
@@ -309,7 +560,9 @@
                 return '€--.--';
             }
             return `€${prezzo.toFixed(2).replace('.', ',')}`;
-        }        /**
+        }
+
+        /**
          * Gestisce la visualizzazione di alert Bootstrap
          * @param {string} messaggio - Il messaggio da mostrare
          * @param {string} tipo - Il tipo di alert ('success', 'danger', 'warning', 'info')
@@ -443,21 +696,77 @@ Italia" required></textarea>
                             <div class="tab-content" id="payment-tabs-content">
                                 <div class="tab-pane fade show active" id="card-tab-pane" role="tabpanel"
                                      aria-labelledby="card-tab-btn" tabindex="0">
-                                    <p class="text-muted small">Il pagamento con carta verrà gestito tramite un gateway
-                                        sicuro esterno (es. Stripe, non implementato in questo esempio) al momento della
-                                        conferma dell'ordine.</p>
-                                    <p class="small"><strong>Non ti verranno chiesti i dati della carta qui.</strong>
-                                        Sarai reindirizzato alla pagina sicura del provider di pagamento dopo aver
-                                        cliccato su "Completa Ordine".</p>
+                                    <div class="alert alert-info alert-sm mb-3">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        <small><strong>Simulazione:</strong> Inserisci dati fittizi per simulare il
+                                            pagamento. Il sistema simula la validazione e l'elaborazione.</small>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label for="card-number" class="form-label small fw-semibold">Numero
+                                                carta</label>
+                                            <input type="text" class="form-control credit-card-input" id="card-number"
+                                                   placeholder="1234 5678 9012 3456" maxlength="19"
+                                                   autocomplete="cc-number">
+                                            <div class="invalid-feedback">Inserisci un numero di carta valido (16
+                                                cifre)
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label for="card-name" class="form-label small fw-semibold">Nome sulla
+                                                carta</label>
+                                            <input type="text" class="form-control" id="card-name"
+                                                   placeholder="Mario Rossi" autocomplete="cc-name">
+                                            <div class="invalid-feedback">Inserisci il nome come appare sulla carta
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="card-expiry"
+                                                   class="form-label small fw-semibold">Scadenza</label>
+                                            <input type="text" class="form-control expiry-input" id="card-expiry"
+                                                   placeholder="MM/AA" maxlength="5" autocomplete="cc-exp">
+                                            <div class="invalid-feedback">Formato: MM/AA</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="card-cvv" class="form-label small fw-semibold">CVV</label>
+                                            <input type="text" class="form-control cvv-input" id="card-cvv"
+                                                   placeholder="123" maxlength="4" autocomplete="cc-csc">
+                                            <div class="invalid-feedback">3-4 cifre sul retro della carta</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 small text-muted">
+                                        <i class="bi bi-shield-lock me-1"></i>
+                                        Pagamento simulato - Nessun dato reale verrà elaborato
+                                    </div>
                                 </div>
+
                                 <div class="tab-pane fade" id="paypal-tab-pane" role="tabpanel"
                                      aria-labelledby="paypal-tab-btn" tabindex="0">
-                                    <div class="text-center py-4">
-                                        <i class="bi bi-paypal mb-4 fs-1"></i>
-                                        <p class="text-muted mb-3 small">
-                                            Verrai reindirizzato al sito di PayPal per completare il pagamento dopo aver
-                                            cliccato su "Completa Ordine".
-                                        </p>
+                                    <div class="alert alert-info alert-sm mb-3">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        <small><strong>Simulazione:</strong> Inserisci credenziali fittizie per simulare
+                                            l'accesso PayPal.</small>
+                                    </div>
+
+                                    <div class="text-center mb-3">
+                                        <i class="bi bi-paypal text-primary fs-2"></i>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label for="paypal-email" class="form-label small fw-semibold">Email
+                                                PayPal</label>
+                                            <input type="email" class="form-control" id="paypal-email"
+                                                   placeholder="la-tua-email@esempio.com">
+                                            <div class="invalid-feedback">Inserisci un indirizzo email valido</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 small text-muted">
+                                        <i class="bi bi-shield-lock me-1"></i>
+                                        Accesso simulato - Nessuna credenziale reale verrà verificata
                                     </div>
                                 </div>
                                 <div class="tab-pane fade" id="bank-tab-pane" role="tabpanel"
