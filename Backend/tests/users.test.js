@@ -297,12 +297,12 @@ describe('Users API (/api/users)', () => {
 
     });
 
-    describe('PUT /api/users/:id/cambia-password', () => {
+    describe('PUT /api/users/:id/changepassword', () => {
 
         it('Cliente: dovrebbe cambiare la propria password con successo', async () => {
             const nuovaPassword = 'nuovaPasswordSicura123';
             const res = await request(app)
-                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .put(`/api/users/${cliente1Id}/changepassword`)
                 .set('Authorization', `Bearer ${cliente1Token}`)
                 .send({
                     password_attuale: cliente1Data.password,
@@ -324,7 +324,7 @@ describe('Users API (/api/users)', () => {
         it('Artigiano: dovrebbe cambiare la propria password con successo', async () => {
             const nuovaPassword = 'passwordArtigianoNuova456';
             const res = await request(app)
-                .put(`/api/users/${artigiano1Id}/cambia-password`)
+                .put(`/api/users/${artigiano1Id}/changepassword`)
                 .set('Authorization', `Bearer ${artigiano1Token}`)
                 .send({
                     password_attuale: artigiano1Data.password,
@@ -338,7 +338,7 @@ describe('Users API (/api/users)', () => {
         it('Admin: dovrebbe cambiare la password di qualsiasi utente', async () => {
             const nuovaPassword = 'passwordCambiataAdmin789';
             const res = await request(app)
-                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .put(`/api/users/${cliente1Id}/changepassword`)
                 .set('Authorization', `Bearer ${adminToken}`)
                 .send({
                     password_attuale: cliente1Data.password,
@@ -351,7 +351,7 @@ describe('Users API (/api/users)', () => {
 
         it('NON dovrebbe cambiare password con password attuale errata', async () => {
             await request(app)
-                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .put(`/api/users/${cliente1Id}/changepassword`)
                 .set('Authorization', `Bearer ${cliente1Token}`)
                 .send({
                     password_attuale: 'passwordErrata',
@@ -362,7 +362,7 @@ describe('Users API (/api/users)', () => {
 
         it('NON dovrebbe cambiare password se troppo corta', async () => {
             await request(app)
-                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .put(`/api/users/${cliente1Id}/changepassword`)
                 .set('Authorization', `Bearer ${cliente1Token}`)
                 .send({
                     password_attuale: cliente1Data.password,
@@ -373,7 +373,7 @@ describe('Users API (/api/users)', () => {
 
         it('Cliente: NON dovrebbe cambiare la password di un altro utente', async () => {
             await request(app)
-                .put(`/api/users/${artigiano1Id}/cambia-password`)
+                .put(`/api/users/${artigiano1Id}/changepassword`)
                 .set('Authorization', `Bearer ${cliente1Token}`)
                 .send({
                     password_attuale: artigiano1Data.password,
@@ -384,7 +384,7 @@ describe('Users API (/api/users)', () => {
 
         it('NON dovrebbe cambiare password senza token', async () => {
             await request(app)
-                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .put(`/api/users/${cliente1Id}/changepassword`)
                 .send({
                     password_attuale: cliente1Data.password,
                     nuova_password: 'nuovaPasswordTest123'
@@ -394,7 +394,7 @@ describe('Users API (/api/users)', () => {
 
         it('NON dovrebbe cambiare password senza dati richiesti', async () => {
             await request(app)
-                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .put(`/api/users/${cliente1Id}/changepassword`)
                 .set('Authorization', `Bearer ${cliente1Token}`)
                 .send({})
                 .expect(400);
@@ -402,7 +402,7 @@ describe('Users API (/api/users)', () => {
 
         it('dovrebbe restituire 404 per utente non esistente', async () => {
             await request(app)
-                .put('/api/users/99999/cambia-password')
+                .put('/api/users/99999/changepassword')
                 .set('Authorization', `Bearer ${adminToken}`)
                 .send({
                     password_attuale: 'qualsiasi',
