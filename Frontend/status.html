@@ -76,6 +76,8 @@
         const urlBaseApi = "";
         let intervalloAggiornamento;
         let tempiRisposta = [];
+        let contaSuccessi = 0;
+        let contaErrori = 0;
         const endpointDaTestare = {
             'autenticazione': [
                 {metodo: 'POST', endpoint: '/api/auth/register', nome: 'Registrazione', pubblico: true},
@@ -166,6 +168,7 @@
                         const tempoRisposta = Date.now() - tempoInizio;
                         tempiRisposta.push(tempoRisposta);
                         console.log(`✅ ${endpoint.endpoint} - Successo (${tempoRisposta}ms)`);
+                        contaSuccessi++;
                         aggiornaEndpointUI(categoria, endpoint, 'success', tempoRisposta);
                         resolve();
                     })
@@ -190,12 +193,14 @@
                                 tempiRisposta.push(tempoRisposta);
                             } else {
                                 stato = 'error';
+                                contaErrori++;
                             }
                         } else if (xhr.status >= 200 && xhr.status < 300) {
                             stato = 'success';
                             tempiRisposta.push(tempoRisposta);
                         } else if (xhr.status >= 500) {
                             stato = 'error';
+                            contaErrori++;
                         } else {
                             stato = 'warning';
                             tempiRisposta.push(tempoRisposta);
@@ -262,8 +267,8 @@
 
         function aggiornaStatistiche() {
             const tuttiEndpoint = Object.values(endpointDaTestare).flat();
-            const endpointAttivi = $('.badge.bg-success, .badge.bg-warning').length;
-            let endpointNonAttivi = $('.badge.bg-danger').length - 2;
+            const endpointAttivi = contaSuccessi;
+            let endpointNonAttivi = contaErrori;
 
             if (endpointNonAttivi < 0) endpointNonAttivi = 0;
 
@@ -291,6 +296,8 @@
         }
 
         function pulisciRisultati() {
+            contaSuccessi = 0;
+            contaErrori = 0;
             Object.keys(endpointDaTestare).forEach(categoria => {
                 $(`#stato-${categoria}`).empty();
             });
