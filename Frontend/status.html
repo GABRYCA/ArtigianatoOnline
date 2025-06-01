@@ -20,15 +20,18 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
             integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <script src="js/headerfooterloader.js"></script>
-
     <style>
         .spin {
             animation: spin 1s linear infinite;
         }
 
         @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .card-body .badge {
@@ -38,41 +41,74 @@
         .bg-slightly-dark {
             background-color: #f8f9fa !important;
         }
+
+        .badge.bg-info {
+            color: white !important;
+        }
+
+        .badge.bg-success {
+            color: white !important;
+        }
+
+        .badge.bg-warning.text-dark {
+            color: #856404 !important;
+        }
+
+        .badge.bg-danger {
+            color: white !important;
+        }
+
+        .badge.bg-secondary {
+            color: white !important;
+        }
+
+        .bi-lock-fill, .bi-globe {
+            font-size: 0.8rem;
+        }
+
+        .card-body:hover {
+            background-color: #f0f0f0 !important;
+            transition: background-color 0.2s ease;
+        }
     </style>
 
     <script>
         const urlBaseApi = "";
         let intervalloAggiornamento;
         let tempiRisposta = [];
-
         const endpointDaTestare = {
             'autenticazione': [
-                { metodo: 'POST', endpoint: '/api/auth/register', nome: 'Registrazione' },
-                { metodo: 'POST', endpoint: '/api/auth/login', nome: 'Login' }
-            ],
-            'utenti': [
-                { metodo: 'GET', endpoint: '/api/users', nome: 'Lista utenti' },
-                { metodo: 'GET', endpoint: '/api/users/1', nome: 'Dettagli utente' }
+                {metodo: 'POST', endpoint: '/api/auth/register', nome: 'Registrazione', pubblico: true},
+                {metodo: 'POST', endpoint: '/api/auth/login', nome: 'Login', pubblico: true},
+                {metodo: 'POST', endpoint: '/api/auth/verify-token', nome: 'Verifica token', pubblico: true}
             ],
             'categorie': [
-                { metodo: 'GET', endpoint: '/api/categories', nome: 'Lista categorie' },
-                { metodo: 'GET', endpoint: '/api/categories/1', nome: 'Dettagli categoria' }
+                {metodo: 'GET', endpoint: '/api/categories', nome: 'Lista categorie', pubblico: true},
+                {metodo: 'GET', endpoint: '/api/categories/1', nome: 'Dettagli categoria', pubblico: true},
+                {metodo: 'POST', endpoint: '/api/categories', nome: 'Crea categoria', richiedeAuth: true},
+                {metodo: 'PUT', endpoint: '/api/categories/1', nome: 'Aggiorna categoria', richiedeAuth: true},
+                {metodo: 'DELETE', endpoint: '/api/categories/1', nome: 'Elimina categoria', richiedeAuth: true}
             ],
             'prodotti': [
-                { metodo: 'GET', endpoint: '/api/products', nome: 'Lista prodotti' },
-                { metodo: 'GET', endpoint: '/api/products/1', nome: 'Dettagli prodotto' }
+                {metodo: 'GET', endpoint: '/api/products', nome: 'Lista prodotti', pubblico: true},
+                {metodo: 'GET', endpoint: '/api/products/1', nome: 'Dettagli prodotto', pubblico: true},
+                {metodo: 'POST', endpoint: '/api/products', nome: 'Crea prodotto', richiedeAuth: true},
+                {metodo: 'PUT', endpoint: '/api/products/1', nome: 'Aggiorna prodotto', richiedeAuth: true},
+                {metodo: 'DELETE', endpoint: '/api/products/1', nome: 'Elimina prodotto', richiedeAuth: true}
             ],
             'ordini': [
-                { metodo: 'GET', endpoint: '/api/orders', nome: 'Lista ordini' },
-                { metodo: 'GET', endpoint: '/api/orders/1', nome: 'Dettagli ordine' }
+                {metodo: 'GET', endpoint: '/api/orders', nome: 'Lista ordini', richiedeAuth: true},
+                {metodo: 'GET', endpoint: '/api/orders/1', nome: 'Dettagli ordine', richiedeAuth: true},
+                {metodo: 'POST', endpoint: '/api/orders', nome: 'Crea ordine', richiedeAuth: true},
+                {metodo: 'PUT', endpoint: '/api/orders/1/status', nome: 'Aggiorna stato ordine', richiedeAuth: true}
             ],
             'pagamenti': [
-                { metodo: 'GET', endpoint: '/api/payments', nome: 'Lista pagamenti' },
-                { metodo: 'GET', endpoint: '/api/payments/1', nome: 'Dettagli pagamento' }
+                {metodo: 'POST', endpoint: '/api/payments', nome: 'Registra pagamento', richiedeAuth: true},
+                {metodo: 'GET', endpoint: '/api/payments/order/1', nome: 'Pagamento ordine', richiedeAuth: true}
             ]
         };
 
-        $(document).ready(function() {
+        $(document).ready(function () {
             verificaStatoApi();
             avviaAggiornamentoAutomatico();
         });
@@ -80,6 +116,8 @@
         function verificaStatoApi() {
             $('#btn-aggiorna').prop('disabled', true);
             $('#btn-aggiorna i').addClass('spin');
+
+            pulisciRisultati();
 
             const tuttiPromise = [];
 
@@ -100,28 +138,72 @@
         function testaEndpoint(categoria, endpoint) {
             return new Promise((resolve) => {
                 const tempoInizio = Date.now();
-
-                $.ajax({
+                let metodoTest = 'HEAD';
+                let opzioniAjax = {
                     url: urlBaseApi + endpoint.endpoint,
-                    method: 'HEAD',
-                    timeout: 5000,
-                    success: function() {
+                    method: metodoTest,
+                    timeout: 5000
+                };
+
+                if (endpoint.metodo === 'POST' || endpoint.metodo === 'PUT' || endpoint.metodo === 'DELETE') {
+                    metodoTest = 'OPTIONS';
+                    opzioniAjax.method = metodoTest;
+                }
+
+                if (endpoint.richiedeAuth) {
+                    const token = localStorage.getItem('sessionToken');
+                    if (token) {
+                        opzioniAjax.headers = {
+                            'Authorization': `Bearer ${token}`
+                        };
+                    }
+                }
+
+                console.log(`Testing ${endpoint.metodo} ${endpoint.endpoint} con metodo ${metodoTest}`);
+
+                $.ajax(opzioniAjax)
+                    .done(function () {
                         const tempoRisposta = Date.now() - tempoInizio;
                         tempiRisposta.push(tempoRisposta);
+                        console.log(`✅ ${endpoint.endpoint} - Successo (${tempoRisposta}ms)`);
                         aggiornaEndpointUI(categoria, endpoint, 'success', tempoRisposta);
                         resolve();
-                    },
-                    error: function(xhr) {
+                    })
+                    .fail(function (xhr) {
                         const tempoRisposta = Date.now() - tempoInizio;
                         let stato = 'error';
-                        if (xhr.status === 405 || xhr.status === 401 || xhr.status === 403) {
+
+                        console.log(`⚠️ ${endpoint.endpoint} - Status: ${xhr.status} (${tempoRisposta}ms)`);
+
+                        if (xhr.status === 401) {
+                            stato = endpoint.richiedeAuth ? 'warning' : 'error';
+                            tempiRisposta.push(tempoRisposta);
+                        } else if (xhr.status === 403) {
+                            stato = 'warning';
+                            tempiRisposta.push(tempoRisposta);
+                        } else if (xhr.status === 405) {
+                            stato = 'warning';
+                            tempiRisposta.push(tempoRisposta);
+                        } else if (xhr.status === 404) {
+                            if (endpoint.endpoint.includes('/1')) {
+                                stato = 'warning';
+                                tempiRisposta.push(tempoRisposta);
+                            } else {
+                                stato = 'error';
+                            }
+                        } else if (xhr.status >= 200 && xhr.status < 300) {
+                            stato = 'success';
+                            tempiRisposta.push(tempoRisposta);
+                        } else if (xhr.status >= 500) {
+                            stato = 'error';
+                        } else {
                             stato = 'warning';
                             tempiRisposta.push(tempoRisposta);
                         }
+
                         aggiornaEndpointUI(categoria, endpoint, stato, tempoRisposta);
                         resolve();
-                    }
-                });
+                    });
             });
         }
 
@@ -135,10 +217,22 @@
                 icona = 'check-circle';
                 testoStato = 'Attivo';
             } else if (stato === 'warning') {
-                badgeClass = 'bg-warning';
+                badgeClass = 'bg-warning text-dark';
                 icona = 'exclamation-triangle';
-                testoStato = 'Limitato';
+
+                if (endpoint.richiedeAuth) {
+                    testoStato = 'Richiede auth';
+                } else if (endpoint.endpoint.includes('/1')) {
+                    testoStato = 'Test limitato';
+                } else {
+                    testoStato = 'Limitato';
+                }
             }
+
+            const metodoBadgeClass = endpoint.metodo === 'GET' ? 'bg-info' :
+                endpoint.metodo === 'POST' ? 'bg-success' :
+                    endpoint.metodo === 'PUT' ? 'bg-warning text-dark' :
+                        endpoint.metodo === 'DELETE' ? 'bg-danger' : 'bg-secondary';
 
             const html = `
             <div class="col-lg-6 col-xl-4">
@@ -146,8 +240,10 @@
                     <div class="card-body py-2 px-3">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <span class="badge ${endpoint.metodo === 'GET' ? 'bg-info' : endpoint.metodo === 'POST' ? 'bg-success' : 'bg-warning'} me-2">${endpoint.metodo}</span>
+                                <span class="badge ${metodoBadgeClass} me-2">${endpoint.metodo}</span>
                                 <span class="fw-medium">${endpoint.nome}</span>
+                                ${endpoint.richiedeAuth ? '<i class="bi bi-lock-fill text-muted ms-1" title="Richiede autenticazione"></i>' : ''}
+                                ${endpoint.pubblico ? '<i class="bi bi-globe text-success ms-1" title="Pubblico"></i>' : ''}
                             </div>
                             <div class="text-end">
                                 <span class="badge ${badgeClass}">
@@ -188,7 +284,6 @@
 
         function avviaAggiornamentoAutomatico() {
             intervalloAggiornamento = setInterval(() => {
-                pulisciRisultati();
                 verificaStatoApi();
             }, 30000);
         }
@@ -200,7 +295,7 @@
             tempiRisposta = [];
         }
 
-        $(window).on('beforeunload', function() {
+        $(window).on('beforeunload', function () {
             if (intervalloAggiornamento) {
                 clearInterval(intervalloAggiornamento);
             }
@@ -217,7 +312,8 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
                     <h1 class="fw-bold">Stato API</h1>
-                    <p class="text-muted">Monitoraggio dello stato delle API in tempo reale</p>
+                    <p class="text-muted">Monitoraggio dello stato delle API in tempo reale basato sulla documentazione
+                        Swagger</p>
                 </div>
                 <div class="d-flex align-items-center">
                     <span class="me-2 text-muted">Ultimo aggiornamento:</span>
@@ -282,24 +378,25 @@
                     <div class="card">
                         <div class="card-header bg-white">
                             <h5 class="mb-0">Stato Dettagliato Endpoint</h5>
+                            <small class="text-muted">
+                                <i class="bi bi-check-circle text-success"></i> Attivo
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-exclamation-triangle text-warning"></i> Limitato/Richiede auth
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-x-circle text-danger"></i> Non disponibile
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-lock-fill text-muted"></i> Richiede autenticazione
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-globe text-success"></i> Pubblico
+                            </small>
                         </div>
                         <div class="card-body">
-                            
                             <!-- Autenticazione -->
                             <div class="mb-4">
                                 <h6 class="text-primary fw-bold mb-3">
                                     <i class="bi bi-shield-check me-2"></i>Autenticazione
                                 </h6>
                                 <div id="stato-autenticazione" class="row g-2">
-                                </div>
-                            </div>
-
-                            <!-- Utenti -->
-                            <div class="mb-4">
-                                <h6 class="text-primary fw-bold mb-3">
-                                    <i class="bi bi-people me-2"></i>Utenti
-                                </h6>
-                                <div id="stato-utenti" class="row g-2">
                                 </div>
                             </div>
 
@@ -351,6 +448,7 @@
 <div id="footer-placeholder"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"></script>
 </body>
 </html>
