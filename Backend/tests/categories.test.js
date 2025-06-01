@@ -159,7 +159,38 @@ describe('Categories API (/api/categories)', () => {
                 .expect(401);
         });
 
-        it('NON dovrebbe creare una categoria con token non admin (es. cliente)', async () => {
+        it('dovrebbe creare una categoria con token artigiano', async () => {
+            const artigianoEmail = `artigiano.cat.${Date.now()}@example.com`;
+            const artigianoPassword = 'passwordArtigiano';
+            const salt = await bcrypt.genSalt(10);
+            const hash = await bcrypt.hash(artigianoPassword, salt);
+            await db.query(
+                `INSERT INTO users (email, password_hash, role, full_name, shop_name, is_active)
+                  VALUES ($1, $2, 'artigiano', 'Artigiano Cat Test', 'Shop Test', TRUE)`,
+                [artigianoEmail, hash]
+            );
+            const loginRes = await request(app)
+                .post('/api/auth/login')
+                .send({ email: artigianoEmail, password: artigianoPassword })
+                .expect(200);
+            const artigianoToken = loginRes.body.token;
+
+            const categoriaArtigiano = {
+                name: `Categoria Artigiano ${Date.now()}`,
+                description: 'Categoria creata da artigiano'
+            };
+
+            const res = await request(app)
+                .post('/api/categories')
+                .set('Authorization', `Bearer ${artigianoToken}`)
+                .send(categoriaArtigiano)
+                .expect(201);
+
+            expect(res.body.name).to.equal(categoriaArtigiano.name);
+            expect(res.body.description).to.equal(categoriaArtigiano.description);
+        });
+
+        it('NON dovrebbe creare una categoria con token non admin/artigiano (es. cliente)', async () => {
             const clienteEmail = `cliente.cat.${Date.now()}@example.com`;
             const clientePassword = 'passwordCliente';
             const salt = await bcrypt.genSalt(10);
@@ -214,6 +245,40 @@ describe('Categories API (/api/categories)', () => {
             description: 'Descrizione aggiornata',
             parent_category_id: null,
         };
+
+        it('dovrebbe aggiornare una categoria esistente con token artigiano', async () => {
+            const artigianoEmail = `artigiano.update.${Date.now()}@example.com`;
+            const artigianoPassword = 'passwordArtigiano';
+            const salt = await bcrypt.genSalt(10);
+            const hash = await bcrypt.hash(artigianoPassword, salt);
+            await db.query(
+                `INSERT INTO users (email, password_hash, role, full_name, shop_name, is_active)
+                  VALUES ($1, $2, 'artigiano', 'Artigiano Update Test', 'Shop Update Test', TRUE)`,
+                [artigianoEmail, hash]
+            );
+            const loginRes = await request(app)
+                .post('/api/auth/login')
+                .send({ email: artigianoEmail, password: artigianoPassword })
+                .expect(200);
+            const artigianoToken = loginRes.body.token;
+
+            const categoryToUpdate = testCategory2;
+            const updateDataArtigiano = {
+                name: `Categoria Aggiornata Artigiano ${Date.now()}`,
+                description: 'Descrizione aggiornata da artigiano',
+            };
+
+            const res = await request(app)
+                .put(`/api/categories/${categoryToUpdate.category_id}`)
+                .set('Authorization', `Bearer ${artigianoToken}`)
+                .send(updateDataArtigiano)
+                .expect(200);
+
+            expect(res.body).to.be.an('object');
+            expect(res.body.category_id).to.equal(categoryToUpdate.category_id);
+            expect(res.body.name).to.equal(updateDataArtigiano.name);
+            expect(res.body.description).to.equal(updateDataArtigiano.description);
+        });
 
         it('dovrebbe aggiornare una categoria esistente con token admin', async () => {
             const categoryToUpdate = testCategory2;

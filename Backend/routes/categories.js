@@ -188,7 +188,7 @@ router.get('/:id', async (req, res) => {
  *   post:
  *     summary: Crea una nuova categoria.
  *     tags: [Categorie]
- *     description: Aggiunge una nuova categoria al sistema. Accessibile solo agli amministratori.
+ *     description: Aggiunge una nuova categoria al sistema. Accessibile agli amministratori e agli artigiani.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -207,13 +207,12 @@ router.get('/:id', async (req, res) => {
  *       '400':
  *         description: Dati di input non validi (es. nome mancante, nome duplicato, parent_id non esistente).
  *       '401':
- *         description: Non autorizzato (token mancante o non valido).
- *       '403':
- *         description: Accesso negato (l'utente non è admin).
+ *         description: Non autorizzato (token mancante o non valido). *       '403':
+ *         description: Accesso negato (l'utente non è admin o artigiano).
  *       '500':
  *         description: Errore interno del server.
  */
-router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async (req, res) => {
     const { name, description, parent_category_id } = req.body;
 
     if (!name) {
@@ -249,7 +248,7 @@ router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) =>
  *   put:
  *     summary: Aggiorna una categoria esistente.
  *     tags: [Categorie]
- *     description: Modifica i dettagli di una categoria. Accessibile solo agli amministratori.
+ *     description: Modifica i dettagli di una categoria. Accessibile agli amministratori e agli artigiani.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -270,15 +269,14 @@ router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) =>
  *       '400':
  *         description: Dati di input non validi (es. nome duplicato, parent_id non esistente, parent_id uguale a id).
  *       '401':
- *         description: Non autorizzato.
- *       '403':
+ *         description: Non autorizzato. *       '403':
  *         description: Accesso negato.
  *       '404':
  *         description: Categoria non trovata.
  *       '500':
  *         description: Errore interno del server.
  */
-router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRoles('admin', 'artigiano'), async (req, res) => {
     const categoryId = parseInt(req.params.id, 10);
     if (isNaN(categoryId)) {
         return res.status(400).json({ message: 'ID categoria non valido.' });
