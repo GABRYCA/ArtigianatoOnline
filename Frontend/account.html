@@ -182,10 +182,10 @@
                 eseguiLogout();
                 return;
             }
-
             caricaInfoUtente();
             caricaOrdini();
             caricaIndirizzo();
+            configuraCambioPassword();
             aggiornaBadgeCarrelloConDelay();
 
             $('#logout-button').on('click', function (e) {
@@ -235,10 +235,88 @@
                         setTimeout(() => {
                             $('#editProfileModal').modal('hide');
                         }, 1500);
+                    }).catch(error => {
+                    console.error("Errore durante il salvataggio del nome:", error);
+                    elementoFeedback.addClass('alert alert-danger').text(`Errore durante il salvataggio: ${error.message || 'Riprova più tardi.'}`);
+                });
+            });
+        }
+
+        /**
+         * Configura la gestione del cambio password
+         */
+        function configuraCambioPassword() {
+            $('#change-password-button').on('click', function (e) {
+                e.preventDefault();
+                // Pulisci i campi del modale prima di aprirlo
+                $('#password-attuale').val('');
+                $('#nuova-password').val('');
+                $('#conferma-password').val('');
+                $('#change-password-modal-feedback').empty().removeClass('alert alert-danger alert-success alert-warning');
+                $('#changePasswordModal').modal('show');
+            });
+
+            $('#save-password-button').on('click', function (e) {
+                e.preventDefault();
+                const passwordAttuale = $('#password-attuale').val().trim();
+                const nuovaPassword = $('#nuova-password').val().trim();
+                const confermaPassword = $('#conferma-password').val().trim();
+                const elementoFeedback = $('#change-password-modal-feedback');
+
+                elementoFeedback.empty().removeClass('alert alert-danger alert-success alert-warning');
+
+                if (!passwordAttuale) {
+                    elementoFeedback.addClass('alert alert-warning').text('Per favore, inserisci la password attuale.');
+                    return;
+                }
+
+                if (!nuovaPassword) {
+                    elementoFeedback.addClass('alert alert-warning').text('Per favore, inserisci la nuova password.');
+                    return;
+                }
+
+                if (nuovaPassword.length < 8) {
+                    elementoFeedback.addClass('alert alert-warning').text('La nuova password deve contenere almeno 8 caratteri.');
+                    return;
+                }
+
+                if (nuovaPassword !== confermaPassword) {
+                    elementoFeedback.addClass('alert alert-warning').text('La conferma password non corrisponde alla nuova password.');
+                    return;
+                }
+
+                if (passwordAttuale === nuovaPassword) {
+                    elementoFeedback.addClass('alert alert-warning').text('La nuova password deve essere diversa da quella attuale.');
+                    return;
+                }
+
+                const datiCambioPassword = {
+                    password_attuale: passwordAttuale,
+                    nuova_password: nuovaPassword
+                };
+
+                eseguiFetchAutenticato(`${urlBaseApi}/api/users/${datiUtente.user_id}/changepassword`, {
+                    method: 'PUT',
+                    body: JSON.stringify(datiCambioPassword)
+                })
+                    .then(response => {
+                        elementoFeedback.addClass('alert alert-success').text('Password cambiata con successo!');
+
+                        setTimeout(() => {
+                            $('#changePasswordModal').modal('hide');
+                        }, 1500);
                     })
                     .catch(error => {
-                        console.error("Errore durante il salvataggio del nome:", error);
-                        elementoFeedback.addClass('alert alert-danger').text(`Errore durante il salvataggio: ${error.message || 'Riprova più tardi.'}`);
+                        console.error("Errore durante il cambio password:", error);
+                        let messaggioErrore = 'Errore durante il cambio password. Riprova più tardi.';
+
+                        if (error.message.includes('401') || error.message.includes('password attuale')) {
+                            messaggioErrore = 'Password attuale non corretta.';
+                        } else if (error.message.includes('400')) {
+                            messaggioErrore = 'Dati non validi. Controlla i campi inseriti.';
+                        }
+
+                        elementoFeedback.addClass('alert alert-danger').text(messaggioErrore);
                     });
             });
         }
@@ -725,12 +803,12 @@
                                             aria-controls="profilo-tab-pane" aria-selected="true">Profilo
                                     </button>
                                 </li>
-                                <!--<li class="nav-item" role="presentation">
+                                <li class="nav-item" role="presentation">
                                     <button class="nav-link text-dark" id="password-tab" data-bs-toggle="tab"
                                             data-bs-target="#password-tab-pane" type="button" role="tab"
                                             aria-controls="password-tab-pane" aria-selected="false">Password
                                     </button>
-                                </li>-->
+                                </li>
                             </ul>
                             <div class="tab-content" id="accountSettingsTabContent">
                                 <div class="tab-pane fade show active" id="profilo-tab-pane" role="tabpanel"
@@ -740,13 +818,13 @@
                                     </p>
                                     <button id="edit-profile-button" class="btn btn-dark">Modifica profilo</button>
                                 </div>
-                                <!--<div class="tab-pane fade" id="password-tab-pane" role="tabpanel"
+                                <div class="tab-pane fade" id="password-tab-pane" role="tabpanel"
                                      aria-labelledby="password-tab" tabindex="0">
                                     <p class="text-muted mb-3">
                                         Cambia password per mantenere sicuro il tuo account.
                                     </p>
                                     <button id="change-password-button" class="btn btn-dark">Cambia password</button>
-                                </div>-->
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -826,6 +904,53 @@ Italia">
                     <div class="col-6 pe-0">
                         <button type="button" id="save-profile-button" class="btn btn-dark w-100">
                             Salva Modifiche
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale cambio password -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title" id="changePasswordModalLabel">Cambia Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="change-password-modal-feedback" class="mb-3"></div>
+                <div class="mb-3">
+                    <label for="password-attuale" class="form-label">Password Attuale</label>
+                    <input type="password" class="form-control" id="password-attuale" required
+                           placeholder="Inserisci la password attuale">
+                    <div class="form-text">Conferma la tua password attuale per motivi di sicurezza.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="nuova-password" class="form-label">Nuova Password</label>
+                    <input type="password" class="form-control" id="nuova-password" required
+                           placeholder="Inserisci la nuova password" minlength="8">
+                    <div class="form-text">La password deve contenere almeno 8 caratteri.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="conferma-password" class="form-label">Conferma Nuova Password</label>
+                    <input type="password" class="form-control" id="conferma-password" required
+                           placeholder="Conferma la nuova password">
+                    <div class="form-text">Ripeti la nuova password per confermare.</div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0">
+                <div class="row justify-content-between w-100 g-1">
+                    <div class="col-6 ps-0">
+                        <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                        </button>
+                    </div>
+                    <div class="col-6 pe-0">
+                        <button type="button" id="save-password-button" class="btn btn-dark w-100">
+                            Cambia Password
                         </button>
                     </div>
                 </div>
