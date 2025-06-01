@@ -280,6 +280,26 @@ router.post('/', authenticateToken, authorizeRoles('cliente'), async (req, res) 
         // Arrotondo a 2 decimali
         totalAmount = Math.round(totalAmount * 100) / 100;
 
+        // Metodo di spedizione
+        if (shipping_method) {
+            if (shipping_method !== 'standard' && shipping_method !== 'express' && shipping_method !== 'free') {
+                return res.status(400).json({message: 'Metodo di spedizione non valido. Deve essere "standard", "express" o "free".'});
+            }
+
+            if (shipping_method === 'free' && totalAmount < 100) {
+                return res.status(400).json({message: 'Per la spedizione gratuita, l\'ordine deve superare i 100 euro.'});
+            }
+
+            if (shipping_method === 'standard') {
+                totalAmount += 4.99;
+            } else if (shipping_method === 'express') {
+                totalAmount += 9.99;
+            }
+
+            // Arrotondo
+            totalAmount = Math.round(totalAmount * 100) / 100;
+        }
+
         // Creo record
         const orderInsertResult = await client.query(
             `INSERT INTO orders (customer_id, status, total_amount, shipping_address, billing_address, shipping_method,
