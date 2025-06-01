@@ -261,14 +261,14 @@
                 let resultSimulazione = null;
                 if (metodoPagamento !== 'bank_transfer') {
                     try {
-                        console.log(`Simulazione elaborazione pagamento ${metodoPagamento} per importo €${importoTotale}...`);
+                        console.log(`Elaborazione pagamento ${metodoPagamento} per importo €${importoTotale}...`);
                         pulsanteCompletaOrdine.text('Elaborazione pagamento...');
 
                         resultSimulazione = await simulaElaborazionePagamento(metodoPagamento, importoTotale);
-                        console.log('Simulazione completata:', resultSimulazione);
+                        console.log('Completato:', resultSimulazione);
 
                     } catch (errorePagamento) {
-                        console.error("Errore simulazione pagamento:", errorePagamento);
+                        console.error("Errore pagamento:", errorePagamento);
                         mostraAlert(`Pagamento non riuscito: ${errorePagamento.message}. Riprova con un altro metodo di pagamento.`, "danger");
                         pulsanteCompletaOrdine.prop('disabled', false).text('Riprova Pagamento');
                         return;
@@ -696,12 +696,6 @@ Italia" required></textarea>
                             <div class="tab-content" id="payment-tabs-content">
                                 <div class="tab-pane fade show active" id="card-tab-pane" role="tabpanel"
                                      aria-labelledby="card-tab-btn" tabindex="0">
-                                    <div class="alert alert-info alert-sm mb-3">
-                                        <i class="bi bi-info-circle me-2"></i>
-                                        <small><strong>Simulazione:</strong> Inserisci dati fittizi per simulare il
-                                            pagamento. Il sistema simula la validazione e l'elaborazione.</small>
-                                    </div>
-
                                     <div class="row g-3">
                                         <div class="col-12">
                                             <label for="card-number" class="form-label small fw-semibold">Numero
@@ -738,17 +732,12 @@ Italia" required></textarea>
 
                                     <div class="mt-3 small text-muted">
                                         <i class="bi bi-shield-lock me-1"></i>
-                                        Pagamento simulato - Nessun dato reale verrà elaborato
+                                        Pagamenti Sicuri - I dati non verranno memorizzati
                                     </div>
                                 </div>
 
                                 <div class="tab-pane fade" id="paypal-tab-pane" role="tabpanel"
                                      aria-labelledby="paypal-tab-btn" tabindex="0">
-                                    <div class="alert alert-info alert-sm mb-3">
-                                        <i class="bi bi-info-circle me-2"></i>
-                                        <small><strong>Simulazione:</strong> Inserisci credenziali fittizie per simulare
-                                            l'accesso PayPal.</small>
-                                    </div>
 
                                     <div class="text-center mb-3">
                                         <i class="bi bi-paypal text-primary fs-2"></i>
