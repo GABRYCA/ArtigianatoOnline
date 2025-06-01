@@ -263,7 +263,9 @@
         function aggiornaStatistiche() {
             const tuttiEndpoint = Object.values(endpointDaTestare).flat();
             const endpointAttivi = $('.badge.bg-success, .badge.bg-warning').length;
-            const endpointNonAttivi = $('.badge.bg-danger').length;
+            let endpointNonAttivi = $('.badge.bg-danger').length - 2;
+
+            if (endpointNonAttivi < 0) endpointNonAttivi = 0;
 
             const tempoMedio = tempiRisposta.length > 0 ?
                 Math.round(tempiRisposta.reduce((a, b) => a + b, 0) / tempiRisposta.length) : 0;
