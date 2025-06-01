@@ -297,4 +297,120 @@ describe('Users API (/api/users)', () => {
 
     });
 
+    describe('PUT /api/users/:id/cambia-password', () => {
+
+        it('Cliente: dovrebbe cambiare la propria password con successo', async () => {
+            const nuovaPassword = 'nuovaPasswordSicura123';
+            const res = await request(app)
+                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${cliente1Token}`)
+                .send({
+                    password_attuale: cliente1Data.password,
+                    nuova_password: nuovaPassword
+                })
+                .expect(200);
+
+            expect(res.body.message).to.equal('Password cambiata con successo');
+
+            // Verifica che la nuova password funzioni per il login
+            const loginRes = await request(app)
+                .post('/api/auth/login')
+                .send({ email: cliente1Data.email, password: nuovaPassword })
+                .expect(200);
+
+            expect(loginRes.body.message).to.equal('Login effettuato con successo');
+        });
+
+        it('Artigiano: dovrebbe cambiare la propria password con successo', async () => {
+            const nuovaPassword = 'passwordArtigianoNuova456';
+            const res = await request(app)
+                .put(`/api/users/${artigiano1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${artigiano1Token}`)
+                .send({
+                    password_attuale: artigiano1Data.password,
+                    nuova_password: nuovaPassword
+                })
+                .expect(200);
+
+            expect(res.body.message).to.equal('Password cambiata con successo');
+        });
+
+        it('Admin: dovrebbe cambiare la password di qualsiasi utente', async () => {
+            const nuovaPassword = 'passwordCambiataAdmin789';
+            const res = await request(app)
+                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({
+                    password_attuale: cliente1Data.password,
+                    nuova_password: nuovaPassword
+                })
+                .expect(200);
+
+            expect(res.body.message).to.equal('Password cambiata con successo');
+        });
+
+        it('NON dovrebbe cambiare password con password attuale errata', async () => {
+            await request(app)
+                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${cliente1Token}`)
+                .send({
+                    password_attuale: 'passwordErrata',
+                    nuova_password: 'nuovaPasswordTest123'
+                })
+                .expect(401);
+        });
+
+        it('NON dovrebbe cambiare password se troppo corta', async () => {
+            await request(app)
+                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${cliente1Token}`)
+                .send({
+                    password_attuale: cliente1Data.password,
+                    nuova_password: '123'
+                })
+                .expect(400);
+        });
+
+        it('Cliente: NON dovrebbe cambiare la password di un altro utente', async () => {
+            await request(app)
+                .put(`/api/users/${artigiano1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${cliente1Token}`)
+                .send({
+                    password_attuale: artigiano1Data.password,
+                    nuova_password: 'tentativoViolazione123'
+                })
+                .expect(403);
+        });
+
+        it('NON dovrebbe cambiare password senza token', async () => {
+            await request(app)
+                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .send({
+                    password_attuale: cliente1Data.password,
+                    nuova_password: 'nuovaPasswordTest123'
+                })
+                .expect(401);
+        });
+
+        it('NON dovrebbe cambiare password senza dati richiesti', async () => {
+            await request(app)
+                .put(`/api/users/${cliente1Id}/cambia-password`)
+                .set('Authorization', `Bearer ${cliente1Token}`)
+                .send({})
+                .expect(400);
+        });
+
+        it('dovrebbe restituire 404 per utente non esistente', async () => {
+            await request(app)
+                .put('/api/users/99999/cambia-password')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({
+                    password_attuale: 'qualsiasi',
+                    nuova_password: 'nuovaPasswordTest123'
+                })
+                .expect(404);
+        });
+
+    });
+
 });

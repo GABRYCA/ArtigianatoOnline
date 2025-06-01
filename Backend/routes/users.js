@@ -1,6 +1,7 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import db from '../db/database.js';
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
+import {authenticateToken, authorizeRoles} from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -93,6 +94,22 @@ const router = express.Router();
  *           type: string
  *           description: Nuovo numero di telefono.
  *           example: "+39 333 9876543"
+ *     CambioPassword:
+ *       type: object
+ *       required:
+ *         - password_attuale
+ *         - nuova_password
+ *       properties:
+ *         password_attuale:
+ *           type: string
+ *           format: password
+ *           description: Password attuale dell'utente per conferma.
+ *           example: passwordVecchia123
+ *         nuova_password:
+ *           type: string
+ *           format: password
+ *           description: Nuova password dell'utente (minimo 8 caratteri consigliati).
+ *           example: passwordNuova456
  *     # ErrorResponse schema è già definito in auth.js, Swagger lo riutilizzerà
  *
  *   securitySchemes:
@@ -172,7 +189,7 @@ router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => 
         res.json(result.rows);
     } catch (error) {
         console.error("Errore nel recuperare la lista utenti:", error);
-        res.status(500).json({ message: 'Errore del server nel recuperare gli utenti.' });
+        res.status(500).json({message: 'Errore del server nel recuperare gli utenti.'});
     }
 });
 
@@ -216,12 +233,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     // ID
     if (isNaN(targetUserId)) {
-        return res.status(400).json({ message: 'ID utente non valido.' });
+        return res.status(400).json({message: 'ID utente non valido.'});
     }
 
     // Verifica permessi (posso modificare il mio profile ma non quello degli altri, a meno che io non sia admin)
     if (requestingUserRole !== 'admin' && requestingUserId !== targetUserId) {
-        return res.status(403).json({ message: 'Accesso negato. Non puoi visualizzare questo profilo.' });
+        return res.status(403).json({message: 'Accesso negato. Non puoi visualizzare questo profilo.'});
     }
 
     try {
@@ -232,13 +249,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Utente non trovato.' });
+            return res.status(404).json({message: 'Utente non trovato.'});
         }
 
         res.json(result.rows[0]);
     } catch (error) {
         console.error(`Errore nel recuperare l'utente ${targetUserId}:`, error);
-        res.status(500).json({ message: 'Errore del server nel recuperare l\'utente.' });
+        res.status(500).json({message: 'Errore del server nel recuperare l\'utente.'});
     }
 });
 
@@ -295,26 +312,26 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const requestingUserRole = req.user.role;
 
     if (isNaN(targetUserId)) {
-        return res.status(400).json({ message: 'ID utente non valido.' });
+        return res.status(400).json({message: 'ID utente non valido.'});
     }
 
     // Verifica permessi (posso modificare il mio profile ma non quello degli altri, a meno che io non sia admin)
     if (requestingUserRole !== 'admin' && requestingUserId !== targetUserId) {
-        return res.status(403).json({ message: 'Accesso negato. Non puoi modificare questo profilo.' });
+        return res.status(403).json({message: 'Accesso negato. Non puoi modificare questo profilo.'});
     }
 
-    const { full_name, shop_name, shop_description, address, phone_number } = req.body;
+    const {full_name, shop_name, shop_description, address, phone_number} = req.body;
 
     // Validazione
     if (!full_name && !shop_name && !shop_description && !address && !phone_number) {
-        return res.status(400).json({ message: 'Nessun dato fornito per l\'aggiornamento.' });
+        return res.status(400).json({message: 'Nessun dato fornito per l\'aggiornamento.'});
     }
 
     try {
         // Recupero utente e dati
         const currentUserResult = await db.query('SELECT * FROM users WHERE user_id = $1', [targetUserId]);
         if (currentUserResult.rows.length === 0) {
-            return res.status(404).json({ message: 'Utente non trovato.' });
+            return res.status(404).json({message: 'Utente non trovato.'});
         }
         const currentUser = currentUserResult.rows[0];
 
@@ -326,12 +343,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
         // UPDATE
         const result = await db.query(
-            `UPDATE users SET
-                full_name = $1,
-                shop_name = $2,
-                shop_description = $3,
-                address = $4,
-                phone_number = $5
+            `UPDATE users
+             SET full_name        = $1,
+                 shop_name        = $2,
+                 shop_description = $3,
+                 address          = $4,
+                 phone_number     = $5
              WHERE user_id = $6
              RETURNING user_id, email, role, full_name, shop_name, shop_description, address, phone_number, is_active, created_at, updated_at`,
             [newFullName, newShopName, newShopDescription, newAddress, newPhoneNumber, targetUserId]
@@ -343,7 +360,112 @@ router.put('/:id', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error(`Errore nell'aggiornare l'utente ${targetUserId}:`, error);
-        res.status(500).json({ message: 'Errore del server durante l\'aggiornamento dell\'utente.' });
+        res.status(500).json({message: 'Errore del server durante l\'aggiornamento dell\'utente.'});
+    }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/cambia-password:
+ *   put:
+ *     summary: Cambia la password di un utente specifico.
+ *     tags: [Utenti]
+ *     description: Permette di cambiare la password dell'utente fornendo la password attuale per conferma. Accessibile solo all'utente stesso o a un amministratore.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           description: ID numerico dell'utente di cui cambiare la password.
+ *           example: 5
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CambioPassword'
+ *     responses:
+ *       '200':
+ *         description: Password cambiata con successo.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Password cambiata con successo
+ *       '400':
+ *         description: Richiesta non valida (es. ID non numerico, dati mancanti, password troppo corta).
+ *       '401':
+ *         description: Non autorizzato (token mancante o non valido, password attuale errata).
+ *       '403':
+ *         description: Accesso negato (utente non autorizzato a cambiare questa password).
+ *       '404':
+ *         description: Utente non trovato.
+ *       '500':
+ *         description: Errore interno del server.
+ */
+router.put('/:id/cambia-password', authenticateToken, async (req, res) => {
+    const targetUserId = parseInt(req.params.id, 10);
+    const requestingUserId = req.user.userId;
+    const requestingUserRole = req.user.role;
+
+    if (isNaN(targetUserId)) {
+        return res.status(400).json({message: 'ID utente non valido.'});
+    }
+
+    // Verifica permessi
+    if (requestingUserRole !== 'admin' && requestingUserId !== targetUserId) {
+        return res.status(403).json({message: 'Accesso negato. Non puoi cambiare la password di questo utente.'});
+    }
+
+    const {password_attuale, nuova_password} = req.body;
+
+    // Validazione
+    if (!password_attuale || !nuova_password) {
+        return res.status(400).json({message: 'Password attuale e nuova password sono obbligatorie.'});
+    }
+
+    if (nuova_password.length < 8) {
+        return res.status(400).json({message: 'La nuova password deve essere di almeno 8 caratteri.'});
+    }
+
+    try {
+        // Utente attuale
+        const userResult = await db.query('SELECT user_id, password_hash FROM users WHERE user_id = $1', [targetUserId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({message: 'Utente non trovato.'});
+        }
+        const user = userResult.rows[0];
+
+        // Verifica password attuale
+        if (requestingUserRole !== 'admin' || requestingUserId === targetUserId) {
+            const isCurrentPasswordValid = await bcrypt.compare(password_attuale, user.password_hash);
+            if (!isCurrentPasswordValid) {
+                return res.status(401).json({message: 'Password attuale non corretta.'});
+            }
+        }
+
+        // Hash nuova password
+        const salt = await bcrypt.genSalt(10);
+        const nuova_password_hash = await bcrypt.hash(nuova_password, salt);
+
+        // Aggiornamento password nel database
+        await db.query(
+            'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+            [nuova_password_hash, targetUserId]
+        );
+
+        res.json({
+            message: 'Password cambiata con successo'
+        });
+    } catch (error) {
+        console.error(`Errore nel cambiare la password dell'utente ${targetUserId}:`, error);
+        res.status(500).json({message: 'Errore del server durante il cambio password.'});
     }
 });
 
