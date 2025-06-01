@@ -156,6 +156,7 @@ Il sistema supporta tre ruoli principali:
 
 2. **Artigiano (`artigiano`)**
   - Gestione catalogo prodotti (CRUD)
+  - Creazione e rinomina categorie
   - Visualizzazione ordini ricevuti
   - Aggiornamento stato ordini
   - Gestione profilo e shop
@@ -218,8 +219,8 @@ Il sistema supporta tre ruoli principali:
 | `GET` | `/` | Lista categorie attive | Pubblico | Supporta struttura gerarchica |
 | `GET` | `/:id` | Dettagli categoria | Pubblico | Include prodotti associati |
 | `GET` | `/:id/products` | Prodotti per categoria | Pubblico | `?page=1&limit=12&sort=price_asc` |
-| `POST` | `/` | Crea categoria | Admin | `{name, description, parent_category_id?}` |
-| `PUT` | `/:id` | Aggiorna categoria | Admin | `{name, description, parent_category_id?}` |
+| `POST` | `/` | Crea categoria | Admin, Artigiano | `{name, description, parent_category_id?}` |
+| `PUT` | `/:id` | Aggiorna categoria | Admin, Artigiano | `{name, description, parent_category_id?}` |
 | `DELETE` | `/:id` | Disattiva categoria | Admin | Soft delete |
 
 ### Prodotti (`/api/products`)
