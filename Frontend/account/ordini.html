@@ -19,6 +19,7 @@
     <!-- JS -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
             integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
         const urlBaseApi = "";
         let datiOrdineGlobali = null;
@@ -193,7 +194,8 @@
          * Recupera i dati dell'ordine tramite API
          * @param {string} idOrdine - ID dell'ordine da recuperare
          * @param {string} token - Token di autenticazione
-         */        function recuperaDatiOrdine(idOrdine, token) {
+         */
+        function recuperaDatiOrdine(idOrdine, token) {
             mostraStatoCaricamento(true);
             resetDatiPagamento();
 
@@ -456,8 +458,127 @@
             $('#summary-customer-name').text(datiOrdine.customer.name);
             $('#summary-customer-email').text(datiOrdine.customer.email);
             $('#summary-total').text(formattaPrezzo(parseFloat(datiOrdineGrezzi.total_amount)));
-
             gestisciPulsantePagaNora(datiOrdine);
+            gestisciPulsanteFattura(datiOrdine);
+        }
+
+        /**
+         * Gestisce pulsante "Scarica fattura" in base allo stato dell'ordine
+         * @param datiOrdine
+         */
+        function gestisciPulsanteFattura(datiOrdine) {
+            const pulsanteFattura = $('.card-body.d-grid.gap-2 button:contains("Scarica fattura")');
+
+            if (datiOrdine.rawStatus === 'delivered') {
+                pulsanteFattura.prop('disabled', false).on('click', function () {
+                    generaFatturaPDF(datiOrdine);
+                });
+            } else {
+                pulsanteFattura.prop('disabled', true);
+            }
+        }
+
+        /**
+         * Genera una fattura in formato PDF dell'ordine
+         * @param datiOrdine
+         */
+        function generaFatturaPDF(datiOrdine) {
+            const {jsPDF} = window.jspdf;
+            const doc = new jsPDF();
+
+            const dataCorrente = new Date().toLocaleDateString('it-IT');
+            const numeroFattura = `FAT-${datiOrdine.id}-${new Date().getFullYear()}`;
+
+            doc.setFontSize(20);
+            doc.setFont(undefined, 'bold');
+            doc.text('FATTURA', 105, 30, {align: 'center'});
+
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Numero Fattura: ${numeroFattura}`, 20, 50);
+            doc.text(`Data Emissione: ${dataCorrente}`, 20, 60);
+            doc.text(`Data Ordine: ${datiOrdine.date}`, 20, 70);
+
+            doc.setFont(undefined, 'bold');
+            doc.text('DATI VENDITORE', 20, 90);
+            doc.setFont(undefined, 'normal');
+            doc.text('Artigianato Online', 20, 100);
+            doc.text('Via Roma, 123', 20, 110);
+            doc.text('20100 Milano (MI)', 20, 120);
+            doc.text('P.IVA: IT12345678901', 20, 130);
+
+            doc.setFont(undefined, 'bold');
+            doc.text('DATI CLIENTE', 120, 90);
+            doc.setFont(undefined, 'normal');
+            doc.text(datiOrdine.customer.name, 120, 100);
+            doc.text(datiOrdine.customer.email, 120, 110);
+
+            const indirizzoFatturazione = datiOrdine.billing.address;
+            let yPosition = 120;
+            indirizzoFatturazione.forEach(riga => {
+                doc.text(riga, 120, yPosition);
+                yPosition += 10;
+            });
+
+            doc.setFont(undefined, 'bold');
+            doc.text('DETTAGLI ORDINE', 20, 160);
+            doc.setFont(undefined, 'normal');
+
+            let yProdotti = 175;
+            doc.text('Descrizione', 20, yProdotti);
+            doc.text('Qtà', 120, yProdotti);
+            doc.text('Prezzo Unit.', 140, yProdotti);
+            doc.text('Totale', 170, yProdotti);
+
+            doc.line(20, yProdotti + 5, 190, yProdotti + 5);
+            yProdotti += 15;
+
+            let totaleOrdine = 0;
+
+            datiOrdine.items.forEach(articolo => {
+                const prezzoUnitario = parseFloat(articolo.price);
+                const quantita = parseInt(articolo.quantity);
+                const totaleArticolo = prezzoUnitario * quantita;
+                totaleOrdine += totaleArticolo;
+
+                const nomeArticolo = articolo.name.length > 30 ?
+                    articolo.name.substring(0, 30) + '...' : articolo.name;
+
+                doc.text(nomeArticolo, 20, yProdotti);
+                doc.text(`${quantita}`, 120, yProdotti);
+                doc.text(`€ ${prezzoUnitario.toFixed(2)}`, 140, yProdotti);
+                doc.text(`€ ${totaleArticolo.toFixed(2)}`, 170, yProdotti);
+
+                yProdotti += 10;
+                doc.text(`Artigiano: ${articolo.artisan}`, 25, yProdotti);
+                doc.text(`SKU: ${articolo.sku}`, 25, yProdotti + 8);
+                yProdotti += 20;
+            });
+
+            doc.line(20, yProdotti, 190, yProdotti);
+            yProdotti += 10;
+
+            doc.setFont(undefined, 'bold');
+            doc.text(`TOTALE: € ${totaleOrdine.toFixed(2)}`, 120, yProdotti);
+
+            yProdotti += 20;
+            doc.setFont(undefined, 'normal');
+            doc.text('Metodo di Spedizione:', 20, yProdotti);
+            doc.text(datiOrdine.shipping.method, 70, yProdotti);
+
+            if (datiOrdine.shipping.trackingNumber && datiOrdine.shipping.trackingNumber !== 'Non disponibile') {
+                yProdotti += 10;
+                doc.text('Codice Tracking:', 20, yProdotti);
+                doc.text(datiOrdine.shipping.trackingNumber, 70, yProdotti);
+            }
+
+            yProdotti += 20;
+            doc.setFontSize(10);
+            doc.text('Fattura generata automaticamente da Artigianato Online', 20, yProdotti);
+            doc.text(`Data di generazione: ${dataCorrente}`, 20, yProdotti + 10);
+
+            const nomeFile = `Fattura_Ordine_${datiOrdine.id}.pdf`;
+            doc.save(nomeFile);
         }
 
         /**
@@ -999,7 +1120,8 @@
                 <div class="card p-2">
                     <div class="card-header bg-white border-bottom-0">
                         <h5 class="card-title mb-0 fw-bold">Azioni</h5>
-                    </div>                    <div class="card-body d-grid gap-2"><a href="mailto:supporto@artigianato.it"
+                    </div>
+                    <div class="card-body d-grid gap-2"><a href="mailto:supporto@artigianato.it"
                                                            class="btn btn-outline-secondary text-start">
                         <i class="bi bi-headset me-2"></i>Contatta l'assistenza
                     </a>
