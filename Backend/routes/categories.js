@@ -186,7 +186,7 @@ router.get('/:id', async (req, res) => {
  * @swagger
  * /api/categories:
  *   post:
- *     summary: Crea una nuova categoria.
+ *     summary: Crea una nuova categoria
  *     tags: [Categorie]
  *     description: Aggiunge una nuova categoria al sistema. Accessibile agli amministratori e agli artigiani.
  *     security:
@@ -197,21 +197,87 @@ router.get('/:id', async (req, res) => {
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CategoryCreate'
+ *           examples:
+ *             esempio1:
+ *               summary: Categoria principale
+ *               value:
+ *                 name: "Ceramiche"
+ *                 description: "Prodotti realizzati in ceramica di alta qualità"
+ *             esempio2:
+ *               summary: Sottocategoria
+ *               value:
+ *                 name: "Vasi"
+ *                 description: "Vasi decorativi in ceramica"
+ *                 parent_category_id: 1
  *     responses:
- *       '201':
- *         description: Categoria creata con successo.
+ *       201:
+ *         description: Categoria creata con successo
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Category'
- *       '400':
- *         description: Dati di ingresso non validi (es. nome mancante, nome duplicato, parent_id non esistente).
- *       '401':
- *         description: Non autorizzato (token mancante o non valido).
- *       '403':
- *         description: Accesso negato (l'utente non è admin o artigiano).
- *       '500':
- *         description: Errore interno del server.
+ *             example:
+ *               category_id: 1
+ *               name: "Ceramiche"
+ *               description: "Prodotti realizzati in ceramica di alta qualità"
+ *               parent_category_id: null
+ *               created_at: "2025-06-03T10:00:00.000Z"
+ *               updated_at: "2025-06-03T10:00:00.000Z"
+ *       400:
+ *         description: Dati di input non validi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               nome_mancante:
+ *                 summary: Nome mancante
+ *                 value:
+ *                   message: "Il nome della categoria è obbligatorio."
+ *               nome_duplicato:
+ *                 summary: Nome già esistente
+ *                 value:
+ *                   message: "Il nome della categoria \"Ceramiche\" esiste già."
+ *               parent_non_esistente:
+ *                 summary: Categoria genitore non trovata
+ *                 value:
+ *                   message: "Categoria genitore con ID 999 non trovata."
+ *       401:
+ *         description: Token di autenticazione mancante o non valido
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *             example:
+ *               message: "Token di accesso richiesto"
+ *       403:
+ *         description: Accesso negato - ruolo insufficiente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *             example:
+ *               message: "Accesso negato"
+ *       500:
+ *         description: Errore interno del server
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *             example:
+ *               message: "Errore del server durante la creazione della categoria."
  */
 router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async (req, res) => {
     const {name, description, parent_category_id} = req.body;
