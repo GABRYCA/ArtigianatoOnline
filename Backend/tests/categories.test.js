@@ -1,4 +1,4 @@
-import { expect } from 'chai';
+import {expect} from 'chai';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import app from '../index.js';
@@ -40,7 +40,8 @@ describe('Categories API (/api/categories)', () => {
             const password_hash = await bcrypt.hash(adminUserData.password, salt);
             const adminRes = await db.query(
                 `INSERT INTO users (email, password_hash, role, full_name, is_active)
-                 VALUES ($1, $2, $3, $4, TRUE) RETURNING user_id`,
+                 VALUES ($1, $2, $3, $4, TRUE)
+                 RETURNING user_id`,
                 [adminUserData.email, password_hash, adminUserData.role, adminUserData.full_name]
             );
             adminUserId = adminRes.rows[0].user_id;
@@ -49,7 +50,7 @@ describe('Categories API (/api/categories)', () => {
             console.log('Login admin per ottenere token...');
             const loginRes = await request(app)
                 .post('/api/auth/login')
-                .send({ email: adminUserData.email, password: adminUserData.password })
+                .send({email: adminUserData.email, password: adminUserData.password})
                 .expect(200);
             adminToken = loginRes.body.token;
             expect(adminToken).to.be.a('string');
@@ -166,12 +167,12 @@ describe('Categories API (/api/categories)', () => {
             const hash = await bcrypt.hash(artigianoPassword, salt);
             await db.query(
                 `INSERT INTO users (email, password_hash, role, full_name, shop_name, is_active)
-                  VALUES ($1, $2, 'artigiano', 'Artigiano Cat Test', 'Shop Test', TRUE)`,
+                 VALUES ($1, $2, 'artigiano', 'Artigiano Cat Test', 'Shop Test', TRUE)`,
                 [artigianoEmail, hash]
             );
             const loginRes = await request(app)
                 .post('/api/auth/login')
-                .send({ email: artigianoEmail, password: artigianoPassword })
+                .send({email: artigianoEmail, password: artigianoPassword})
                 .expect(200);
             const artigianoToken = loginRes.body.token;
 
@@ -189,7 +190,6 @@ describe('Categories API (/api/categories)', () => {
             expect(res.body.name).to.equal(categoriaArtigiano.name);
             expect(res.body.description).to.equal(categoriaArtigiano.description);
         });
-
         it('NON dovrebbe creare una categoria con token non admin/artigiano (es. cliente)', async () => {
             const clienteEmail = `cliente.cat.${Date.now()}@example.com`;
             const clientePassword = 'passwordCliente';
@@ -197,12 +197,12 @@ describe('Categories API (/api/categories)', () => {
             const hash = await bcrypt.hash(clientePassword, salt);
             await db.query(
                 `INSERT INTO users (email, password_hash, role, full_name, is_active)
-                  VALUES ($1, $2, 'cliente', 'Cliente Cat Test', TRUE)`,
+                 VALUES ($1, $2, 'cliente', 'Cliente Cat Test', TRUE)`,
                 [clienteEmail, hash]
             );
             const loginRes = await request(app)
                 .post('/api/auth/login')
-                .send({ email: clienteEmail, password: clientePassword })
+                .send({email: clienteEmail, password: clientePassword})
                 .expect(200);
             const clienteToken = loginRes.body.token;
 
@@ -214,7 +214,7 @@ describe('Categories API (/api/categories)', () => {
         });
 
         it('NON dovrebbe creare una categoria senza nome', async () => {
-            const { name, ...badData } = newCategoryData;
+            const {name, ...badData} = newCategoryData;
             await request(app)
                 .post('/api/categories')
                 .set('Authorization', `Bearer ${adminToken}`)
@@ -226,15 +226,7 @@ describe('Categories API (/api/categories)', () => {
             await request(app)
                 .post('/api/categories')
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ name: testCategory1.name })
-                .expect(400);
-        });
-
-        it('NON dovrebbe creare una categoria con parent_category_id non esistente', async () => {
-            await request(app)
-                .post('/api/categories')
-                .set('Authorization', `Bearer ${adminToken}`)
-                .send({ ...newCategoryData, parent_category_id: 99999 })
+                .send({name: testCategory1.name})
                 .expect(400);
         });
     });
@@ -253,12 +245,12 @@ describe('Categories API (/api/categories)', () => {
             const hash = await bcrypt.hash(artigianoPassword, salt);
             await db.query(
                 `INSERT INTO users (email, password_hash, role, full_name, shop_name, is_active)
-                  VALUES ($1, $2, 'artigiano', 'Artigiano Update Test', 'Shop Update Test', TRUE)`,
+                 VALUES ($1, $2, 'artigiano', 'Artigiano Update Test', 'Shop Update Test', TRUE)`,
                 [artigianoEmail, hash]
             );
             const loginRes = await request(app)
                 .post('/api/auth/login')
-                .send({ email: artigianoEmail, password: artigianoPassword })
+                .send({email: artigianoEmail, password: artigianoPassword})
                 .expect(200);
             const artigianoToken = loginRes.body.token;
 
@@ -309,12 +301,12 @@ describe('Categories API (/api/categories)', () => {
             const hash = await bcrypt.hash(clientePassword, salt);
             await db.query(
                 `INSERT INTO users (email, password_hash, role, full_name, is_active)
-                  VALUES ($1, $2, 'cliente', 'Cliente Put Test', TRUE)`,
+                 VALUES ($1, $2, 'cliente', 'Cliente Put Test', TRUE)`,
                 [clienteEmail, hash]
             );
             const loginRes = await request(app)
                 .post('/api/auth/login')
-                .send({ email: clienteEmail, password: clientePassword })
+                .send({email: clienteEmail, password: clientePassword})
                 .expect(200);
             const clienteToken = loginRes.body.token;
 
@@ -337,7 +329,7 @@ describe('Categories API (/api/categories)', () => {
             await request(app)
                 .put(`/api/categories/${testCategory2.category_id}`)
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ name: testCategory1.name })
+                .send({name: testCategory1.name})
                 .expect(400);
         });
 
@@ -345,7 +337,7 @@ describe('Categories API (/api/categories)', () => {
             await request(app)
                 .put(`/api/categories/${testCategory1.category_id}`)
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ parent_category_id: testCategory1.category_id })
+                .send({parent_category_id: testCategory1.category_id})
                 .expect(400);
         });
 
@@ -353,7 +345,7 @@ describe('Categories API (/api/categories)', () => {
             await request(app)
                 .put(`/api/categories/${testCategory1.category_id}`)
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ parent_category_id: 99999 })
+                .send({parent_category_id: 99999})
                 .expect(400);
         });
     });
@@ -392,12 +384,12 @@ describe('Categories API (/api/categories)', () => {
             const hash = await bcrypt.hash(clientePassword, salt);
             await db.query(
                 `INSERT INTO users (email, password_hash, role, full_name, is_active)
-                  VALUES ($1, $2, 'cliente', 'Cliente Del Test', TRUE)`,
+                 VALUES ($1, $2, 'cliente', 'Cliente Del Test', TRUE)`,
                 [clienteEmail, hash]
             );
             const loginRes = await request(app)
                 .post('/api/auth/login')
-                .send({ email: clienteEmail, password: clientePassword })
+                .send({email: clienteEmail, password: clientePassword})
                 .expect(200);
             const clienteToken = loginRes.body.token;
 

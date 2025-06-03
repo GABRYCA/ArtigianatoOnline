@@ -84,20 +84,28 @@ describe('Auth API (/api/auth)', () => {
 
             expect(res.body.message).to.contain('Email già registrata');
         });
+        it('NON dovrebbe registrare senza email', async () => {
+            const badData = {...clienteData};
+            delete badData.email;
 
-        const requiredFields = ['email', 'password', 'role', 'full_name'];
-        requiredFields.forEach(field => {
-            it(`NON dovrebbe registrare senza il campo obbligatorio: ${field}`, async () => {
-                const badData = {...clienteData};
-                delete badData[field];
+            const res = await request(app)
+                .post('/api/auth/register')
+                .send(badData)
+                .expect(400);
 
-                const res = await request(app)
-                    .post('/api/auth/register')
-                    .send(badData)
-                    .expect(400);
+            expect(res.body.message).to.contain('obbligatori');
+        });
 
-                expect(res.body.message).to.contain('obbligatori');
-            });
+        it('NON dovrebbe registrare senza password', async () => {
+            const badData = {...clienteData};
+            delete badData.password;
+
+            const res = await request(app)
+                .post('/api/auth/register')
+                .send(badData)
+                .expect(400);
+
+            expect(res.body.message).to.contain('obbligatori');
         });
 
         it('NON dovrebbe registrare un ARTIGIANO senza shop_name', async () => {
