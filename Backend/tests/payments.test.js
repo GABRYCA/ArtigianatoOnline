@@ -147,6 +147,7 @@ describe('Payments API (/api/payments)', () => {
                 .send(paymentData)
                 .expect(401);
         });
+
         it('NON dovrebbe registrare pagamento per ordine non esistente', async () => {
             const paymentData = {...basePaymentData, order_id: 99999, amount: 10};
             await request(app)
