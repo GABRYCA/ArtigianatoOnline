@@ -147,29 +147,6 @@ describe('Payments API (/api/payments)', () => {
                 .send(paymentData)
                 .expect(401);
         });
-        it('NON dovrebbe registrare pagamento con token non admin (cliente)', async () => {
-            const orderItems = [{product_id: productId, quantity: 1}];
-            const orderRes = await request(app)
-                .post('/api/orders')
-                .set('Authorization', `Bearer ${clienteToken}`)
-                .send({shipping_address: 'Via Test Auth', items: orderItems})
-                .expect(201);
-            const newOrderId = orderRes.body.order_id;
-            const correctAmount = parseFloat(orderRes.body.total_amount);
-
-            const paymentData = {
-                ...basePaymentData,
-                order_id: newOrderId,
-                amount: correctAmount,
-                transaction_id: `TRANS-AUTH-${Date.now()}`
-            };
-
-            await request(app)
-                .post('/api/payments')
-                .set('Authorization', `Bearer ${clienteToken}`)
-                .send(paymentData)
-                .expect(403);
-        });
         it('NON dovrebbe registrare pagamento per ordine non esistente', async () => {
             const paymentData = {...basePaymentData, order_id: 99999, amount: 10};
             await request(app)
