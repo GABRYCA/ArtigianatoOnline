@@ -207,7 +207,8 @@ router.get('/:id', async (req, res) => {
  *       '400':
  *         description: Dati di input non validi (es. nome mancante, nome duplicato, parent_id non esistente).
  *       '401':
- *         description: Non autorizzato (token mancante o non valido). *       '403':
+ *         description: Non autorizzato (token mancante o non valido).
+ *       '403':
  *         description: Accesso negato (l'utente non è admin o artigiano).
  *       '500':
  *         description: Errore interno del server.
