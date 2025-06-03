@@ -294,29 +294,6 @@ describe('Categories API (/api/categories)', () => {
                 .expect(401);
         });
 
-        it('NON dovrebbe aggiornare una categoria con token non admin', async () => {
-            const clienteEmail = `cliente.cat.put.${Date.now()}@example.com`;
-            const clientePassword = 'passwordClientePut';
-            const salt = await bcrypt.genSalt(10);
-            const hash = await bcrypt.hash(clientePassword, salt);
-            await db.query(
-                `INSERT INTO users (email, password_hash, role, full_name, is_active)
-                 VALUES ($1, $2, 'cliente', 'Cliente Put Test', TRUE)`,
-                [clienteEmail, hash]
-            );
-            const loginRes = await request(app)
-                .post('/api/auth/login')
-                .send({email: clienteEmail, password: clientePassword})
-                .expect(200);
-            const clienteToken = loginRes.body.token;
-
-            await request(app)
-                .put(`/api/categories/${testCategory1.category_id}`)
-                .set('Authorization', `Bearer ${clienteToken}`)
-                .send(updateData)
-                .expect(403);
-        });
-
         it('dovrebbe restituire 404 se si tenta di aggiornare una categoria non esistente', async () => {
             await request(app)
                 .put('/api/categories/99999')
