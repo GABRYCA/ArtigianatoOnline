@@ -269,8 +269,7 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async 
  *       '400':
  *         description: Dati di input non validi (es. nome duplicato, parent_id non esistente, parent_id uguale a id).
  *       '401':
- *         description: Non autorizzato. *       '403':
- *         description: Accesso negato.
+ *         description: Non autorizzato.
  *       '404':
  *         description: Categoria non trovata.
  *       '500':
