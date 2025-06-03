@@ -1,6 +1,6 @@
 import express from 'express';
 import db from '../db/database.js';
-import {authenticateToken, authorizeRoles} from '../middleware/auth.js';
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -129,7 +129,7 @@ router.get('/', async (req, res) => {
         res.json(result.rows);
     } catch (error) {
         console.error("Errore nel recuperare le categorie:", error);
-        res.status(500).json({message: 'Errore del server nel recuperare le categorie.'});
+        res.status(500).json({ message: 'Errore del server nel recuperare le categorie.' });
     }
 });
 
@@ -162,7 +162,7 @@ router.get('/:id', async (req, res) => {
     const categoryId = parseInt(req.params.id, 10);
 
     if (isNaN(categoryId)) {
-        return res.status(400).json({message: 'ID categoria non valido.'});
+        return res.status(400).json({ message: 'ID categoria non valido.' });
     }
 
     try {
@@ -172,13 +172,13 @@ router.get('/:id', async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({message: 'Categoria non trovata.'});
+            return res.status(404).json({ message: 'Categoria non trovata.' });
         }
 
         res.json(result.rows[0]);
     } catch (error) {
         console.error(`Errore nel recuperare la categoria ${categoryId}:`, error);
-        res.status(500).json({message: 'Errore del server nel recuperare la categoria.'});
+        res.status(500).json({ message: 'Errore del server nel recuperare la categoria.' });
     }
 });
 
@@ -186,7 +186,7 @@ router.get('/:id', async (req, res) => {
  * @swagger
  * /api/categories:
  *   post:
- *     summary: Crea una nuova categoria
+ *     summary: Crea una nuova categoria.
  *     tags: [Categorie]
  *     description: Aggiunge una nuova categoria al sistema. Accessibile agli amministratori e agli artigiani.
  *     security:
@@ -197,100 +197,33 @@ router.get('/:id', async (req, res) => {
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CategoryCreate'
- *           examples:
- *             esempio1:
- *               summary: Categoria principale
- *               value:
- *                 name: "Ceramiche"
- *                 description: "Prodotti realizzati in ceramica di alta qualità"
- *             esempio2:
- *               summary: Sottocategoria
- *               value:
- *                 name: "Vasi"
- *                 description: "Vasi decorativi in ceramica"
- *                 parent_category_id: 1
  *     responses:
- *       201:
- *         description: Categoria creata con successo
+ *       '201':
+ *         description: Categoria creata con successo.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Category'
- *             example:
- *               category_id: 1
- *               name: "Ceramiche"
- *               description: "Prodotti realizzati in ceramica di alta qualità"
- *               parent_category_id: null
- *               created_at: "2025-06-03T10:00:00.000Z"
- *               updated_at: "2025-06-03T10:00:00.000Z"
- *       400:
- *         description: Dati di input non validi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *             examples:
- *               nome_mancante:
- *                 summary: Nome mancante
- *                 value:
- *                   message: "Il nome della categoria è obbligatorio."
- *               nome_duplicato:
- *                 summary: Nome già esistente
- *                 value:
- *                   message: "Il nome della categoria \"Ceramiche\" esiste già."
- *               parent_non_esistente:
- *                 summary: Categoria genitore non trovata
- *                 value:
- *                   message: "Categoria genitore con ID 999 non trovata."
- *       401:
- *         description: Token di autenticazione mancante o non valido
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *             example:
- *               message: "Token di accesso richiesto"
- *       403:
- *         description: Accesso negato - ruolo insufficiente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *             example:
- *               message: "Accesso negato"
- *       500:
- *         description: Errore interno del server
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *             example:
- *               message: "Errore del server durante la creazione della categoria."
+ *       '400':
+ *         description: Dati di input non validi (es. nome mancante, nome duplicato, parent_id non esistente).
+ *       '401':
+ *         description: Non autorizzato (token mancante o non valido). *       '403':
+ *         description: Accesso negato (l'utente non è admin o artigiano).
+ *       '500':
+ *         description: Errore interno del server.
  */
 router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async (req, res) => {
-    const {name, description, parent_category_id} = req.body;
+    const { name, description, parent_category_id } = req.body;
 
     if (!name) {
-        return res.status(400).json({message: 'Il nome della categoria è obbligatorio.'});
+        return res.status(400).json({ message: 'Il nome della categoria è obbligatorio.' });
     }
 
     try {
         if (parent_category_id) {
             const parentCheck = await db.query('SELECT 1 FROM categories WHERE category_id = $1', [parent_category_id]);
             if (parentCheck.rows.length === 0) {
-                return res.status(400).json({message: `Categoria genitore con ID ${parent_category_id} non trovata.`});
+                return res.status(400).json({ message: `Categoria genitore con ID ${parent_category_id} non trovata.` });
             }
         }
 
@@ -303,9 +236,9 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async 
     } catch (error) {
         if (!(error.code === '23505' && error.constraint === 'categories_name_key')) console.error("Errore nella creazione della categoria:", error);
         if (error.code === '23505' && error.constraint === 'categories_name_key') { // Nome duplicato
-            return res.status(400).json({message: `Il nome della categoria "${name}" esiste già.`});
+            return res.status(400).json({ message: `Il nome della categoria "${name}" esiste già.` });
         }
-        res.status(500).json({message: 'Errore del server durante la creazione della categoria.'});
+        res.status(500).json({ message: 'Errore del server durante la creazione della categoria.' });
     }
 });
 
@@ -332,11 +265,11 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async 
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Category' *       '400':
+ *               $ref: '#/components/schemas/Category'
+ *       '400':
  *         description: Dati di input non validi (es. nome duplicato, parent_id non esistente, parent_id uguale a id).
  *       '401':
- *         description: Non autorizzato.
- *       '403':
+ *         description: Non autorizzato. *       '403':
  *         description: Accesso negato.
  *       '404':
  *         description: Categoria non trovata.
@@ -346,33 +279,33 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'artigiano'), async 
 router.put('/:id', authenticateToken, authorizeRoles('admin', 'artigiano'), async (req, res) => {
     const categoryId = parseInt(req.params.id, 10);
     if (isNaN(categoryId)) {
-        return res.status(400).json({message: 'ID categoria non valido.'});
+        return res.status(400).json({ message: 'ID categoria non valido.' });
     }
 
-    const {name, description, parent_category_id} = req.body;
+    const { name, description, parent_category_id } = req.body;
 
     // Verifico che almeno un campo sia presente
     if (name === undefined && description === undefined && parent_category_id === undefined) {
-        return res.status(400).json({message: 'Nessun dato fornito per l\'aggiornamento.'});
+        return res.status(400).json({ message: 'Nessun dato fornito per l\'aggiornamento.' });
     }
 
     // Impedisco che una categoria sia genitore di se stessa
     if (parent_category_id !== undefined && parent_category_id === categoryId) {
-        return res.status(400).json({message: 'Una categoria non può essere genitore di se stessa.'});
+        return res.status(400).json({ message: 'Una categoria non può essere genitore di se stessa.' });
     }
 
     try {
         // Verifico esistenza categoria
         const currentCat = await db.query('SELECT * FROM categories WHERE category_id = $1', [categoryId]);
         if (currentCat.rows.length === 0) {
-            return res.status(404).json({message: 'Categoria non trovata.'});
+            return res.status(404).json({ message: 'Categoria non trovata.' });
         }
 
         // Verifico esistenza nuovo parent_category_id (se fornito e non null)
         if (parent_category_id) {
             const parentCheck = await db.query('SELECT 1 FROM categories WHERE category_id = $1', [parent_category_id]);
             if (parentCheck.rows.length === 0) {
-                return res.status(400).json({message: `Nuova categoria genitore con ID ${parent_category_id} non trovata.`});
+                return res.status(400).json({ message: `Nuova categoria genitore con ID ${parent_category_id} non trovata.` });
             }
         }
 
@@ -398,15 +331,14 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'artigiano'), asyn
         addUpdateField('parent_category_id', parent_category_id);
 
         if (fieldsToUpdate.length === 0) {
-            return res.status(400).json({message: 'Nessun dato valido per l\'aggiornamento.'});
+            return res.status(400).json({ message: 'Nessun dato valido per l\'aggiornamento.' });
         }
 
         queryParams.push(categoryId);
 
         const updateQuery = `
             UPDATE categories
-            SET ${fieldsToUpdate.join(', ')},
-                updated_at = CURRENT_TIMESTAMP
+            SET ${fieldsToUpdate.join(', ')}, updated_at = CURRENT_TIMESTAMP
             WHERE category_id = $${paramIndex}
              RETURNING *`;
 
@@ -417,9 +349,9 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'artigiano'), asyn
         if (!(error.code === '23505' && error.constraint === 'categories_name_key')) console.error(`Errore nell'aggiornare la categoria ${categoryId}:`, error);
         if (error.code === '23505' && error.constraint === 'categories_name_key') {
             const conflictingName = req.body.name || 'specificato';
-            return res.status(400).json({message: `Il nome della categoria "${conflictingName}" esiste già.`});
+            return res.status(400).json({ message: `Il nome della categoria "${conflictingName}" esiste già.` });
         }
-        res.status(500).json({message: 'Errore del server durante l\'aggiornamento della categoria.'});
+        res.status(500).json({ message: 'Errore del server durante l\'aggiornamento della categoria.' });
     }
 });
 
@@ -449,14 +381,14 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'artigiano'), asyn
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const categoryId = parseInt(req.params.id, 10);
     if (isNaN(categoryId)) {
-        return res.status(400).json({message: 'ID categoria non valido.'});
+        return res.status(400).json({ message: 'ID categoria non valido.' });
     }
 
     try {
         // Verifico esistenza
         const checkResult = await db.query('SELECT 1 FROM categories WHERE category_id = $1', [categoryId]);
         if (checkResult.rows.length === 0) {
-            return res.status(404).json({message: 'Categoria non trovata.'});
+            return res.status(404).json({ message: 'Categoria non trovata.' });
         }
 
         // Eseguo
@@ -466,7 +398,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, re
 
     } catch (error) {
         console.error(`Errore nell'eliminare la categoria ${categoryId}:`, error);
-        res.status(500).json({message: 'Errore del server durante l\'eliminazione della categoria.'});
+        res.status(500).json({ message: 'Errore del server durante l\'eliminazione della categoria.' });
     }
 });
 
