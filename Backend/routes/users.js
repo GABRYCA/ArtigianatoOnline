@@ -629,4 +629,132 @@ router.put('/:id/adminupdate', authenticateToken, authorizeRoles('admin'), async
 
 
 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     summary: Elimina un utente dal sistema.
+ *     tags: [Utenti]
+ *     description: Permette di eliminare un utente dal sistema. Accessibile solo agli amministratori. L'eliminazione è irreversibile e rimuove anche tutti i dati associati all'utente.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           description: ID numerico dell'utente da eliminare.
+ *           example: 5
+ *     responses:
+ *       '200':
+ *         description: Utente eliminato con successo.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Utente eliminato con successo
+ *                 deletedUser:
+ *                   type: object
+ *                   properties:
+ *                     user_id:
+ *                       type: integer
+ *                       example: 5
+ *                     email:
+ *                       type: string
+ *                       example: utente@email.com
+ *                     full_name:
+ *                       type: string
+ *                       example: Nome Utente
+ *       '400':
+ *         description: Richiesta non valida (ID utente non valido).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '401':
+ *         description: Non autorizzato (token mancante o non valido).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '403':
+ *         description: Accesso negato (l'utente non è admin).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '404':
+ *         description: Utente non trovato.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '409':
+ *         description: Conflitto (impossibile eliminare l'utente a causa di vincoli nel database).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '500':
+ *         description: Errore interno del server.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    const targetUserId = parseInt(req.params.id, 10);
+    const requestingUserId = req.user.userId;
+
+    if (isNaN(targetUserId)) {
+        return res.status(400).json({message: 'ID utente non valido.'});
+    }
+
+    if (targetUserId === requestingUserId) {
+        return res.status(400).json({message: 'Non puoi eliminare il tuo stesso account.'});
+    }
+
+    try {
+        const userResult = await db.query('SELECT user_id, email, full_name, role FROM users WHERE user_id = $1', [targetUserId]);
+        
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({message: 'Utente non trovato.'});
+        }
+
+        const userToDelete = userResult.rows[0];
+
+        const deleteResult = await db.query('DELETE FROM users WHERE user_id = $1 RETURNING user_id', [targetUserId]);
+        
+        if (deleteResult.rows.length === 0) {
+            return res.status(500).json({message: 'Errore durante l\'eliminazione dell\'utente.'});
+        }
+
+        res.json({
+            message: 'Utente eliminato con successo',
+            deletedUser: {
+                user_id: userToDelete.user_id,
+                email: userToDelete.email,
+                full_name: userToDelete.full_name,
+                role: userToDelete.role
+            }
+        });
+    } catch (error) {
+        console.error(`Errore nell'eliminazione dell'utente ${targetUserId}:`, error);
+        
+        if (error.code === '23503') {
+            return res.status(409).json({
+                message: 'Impossibile eliminare l\'utente. Esistono ancora dati associati a questo utente nel sistema (ordini, prodotti, ecc.).'
+            });
+        }
+        
+        res.status(500).json({message: 'Errore del server durante l\'eliminazione dell\'utente.'});
+    }
+});
+
+
+
 export default router;
