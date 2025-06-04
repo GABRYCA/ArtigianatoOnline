@@ -9,14 +9,14 @@
   "license": "MIT",
   "author": "AnonymousGCA RiccardoCoder",
   "type": "module",
-  "main": "index.js",
-  "scripts": {
+  "main": "index.js",  "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
     "seed": "node scripts/seed.js",
     "setup-db": "node scripts/setupDb.js",
     "clear": "node scripts/clear.js",
-    "test": "mocha tests/**/*.test.js --timeout 10000 --exit"
+    "test": "mocha tests/**/*.test.js --timeout 10000 --exit",
+    "admin": "node scripts/gestione-admin.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
