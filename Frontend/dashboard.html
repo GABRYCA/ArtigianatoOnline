@@ -32,6 +32,8 @@
         let modaleProdotto = null;
         let modaleInfoSpedizione = null;
         let modaleCategoria = null;
+        let modaleUtente = null;
+
         $(document).ready(function () {
             if (!tokenSessione || !datiUtenteString) {
                 logout();
@@ -64,12 +66,18 @@
             } else {
                 console.error("Elemento modale #shippingInfoModal non trovato!");
             }
-
             const elementoModaleCategoria = document.getElementById('categoryModal');
             if (elementoModaleCategoria) {
                 modaleCategoria = new bootstrap.Modal(elementoModaleCategoria);
             } else {
                 console.error("Elemento modale #categoryModal non trovato!");
+            }
+
+            const elementoModaleUtente = document.getElementById('userModal');
+            if (elementoModaleUtente) {
+                modaleUtente = new bootstrap.Modal(elementoModaleUtente);
+            } else {
+                console.error("Elemento modale #userModal non trovato!");
             }
             caricaCategorie()
                 .then(() => {
@@ -80,6 +88,11 @@
                     if (datiUtente.role === 'admin' || datiUtente.role === 'artigiano') {
                         $('#addCategoryBtn').show();
                         $('#categories-tab-item').show();
+                    }
+
+                    if (datiUtente.role === 'admin') {
+                        $('#users-tab-item').show();
+                        caricaUtentiTutti();
                     }
                 })
                 .catch(errore => {
@@ -125,6 +138,36 @@
                 e.preventDefault();
                 salvaCategoria();
             });
+
+            $('#userForm').on('submit', function (e) {
+                e.preventDefault();
+                salvaUtente();
+            });
+
+            $('#users-table').on('click', '.edit-user-btn', function () {
+                const idUtente = $(this).data('user-id');
+                apriModaleUtente(idUtente);
+            });
+
+            $('#users-table').on('click', '.delete-user-btn', function () {
+                const idUtente = $(this).data('user-id');
+                cancellaUtente(idUtente);
+            });
+
+            $('#users-table').on('click', '.toggle-status-btn', function () {
+                const idUtente = $(this).data('user-id');
+                cambiaStatoUtente(idUtente);
+            });
+
+            $('#userRole').on('change', function () {
+                const ruoloSelezionato = $(this).val();
+                if (ruoloSelezionato === 'artigiano') {
+                    $('#artisan-fields-user').removeClass('d-none');
+                } else {
+                    $('#artisan-fields-user').addClass('d-none');
+                }
+            });
+
             $(elementoModaleProdotto).on('hidden.bs.modal', function () {
                 $('#productForm')[0].reset();
                 $('#product-modal-feedback').empty().removeClass('alert-danger alert-success');
@@ -141,6 +184,16 @@
                 $('#categoryModalLabel').text('Aggiungi Nuova Categoria');
                 $('#saveCategoryBtn').text('Salva Categoria');
                 $('#saveCategoryBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+            });
+
+            $(elementoModaleUtente).on('hidden.bs.modal', function () {
+                $('#userForm')[0].reset();
+                $('#user-modal-feedback').empty().removeClass('alert-danger alert-success');
+                $('#userId').val('');
+                $('#userModalLabel').text('Modifica Utente');
+                $('#saveUserBtn').text('Salva Utente');
+                $('#saveUserBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+                $('#artisan-fields-user').addClass('d-none');
             });
 
             $('#all-orders-table').on('click', '.update-status-btn', async function () {
@@ -196,6 +249,7 @@
                     }
                 }
             });
+
             $('#shippingInfoForm').on('submit', async function (e) {
                 e.preventDefault();
                 const pulsanteSalva = $('#saveShippingInfoBtn');
@@ -546,7 +600,8 @@
 
         /**
          * Carica tutte le categorie nella tabella di gestione
-         */        async function caricaCategorieTutte() {
+         */
+        async function caricaCategorieTutte() {
             const corpoTabella = $('#categories-table');
             corpoTabella.empty().html('<tr><td colspan="3" class="text-center text-muted">Caricamento categorie...</td></tr>');
 
@@ -716,7 +771,8 @@
 
         /**
          * Traduce lo stato dell'ordine dall'inglese all'italiano
-         */        function traduciStatoOrdine(stato) {
+         */
+        function traduciStatoOrdine(stato) {
             const traduzioni = {
                 'pending': 'In Attesa di Pagamento',
                 'paid': 'Pagato',
@@ -926,6 +982,231 @@
             localStorage.removeItem('userData');
             window.location.href = 'auth/autenticazione.html';
         }
+
+        /**
+         * Carica tutti gli utenti nella tabella
+         */
+        async function caricaUtentiTutti() {
+            const containerTabella = $('#users-table');
+            const containerFeedback = $('#users-feedback');
+
+            containerTabella.html('<tr><td colspan="7" class="text-center text-muted">Caricamento utenti...</td></tr>');
+            containerFeedback.empty();
+
+            try {
+                const risposta = await fetchAutenticato(`${urlBaseApi}/api/users`, {method: 'GET'});
+                const utenti = risposta.data || risposta;
+
+                if (!utenti || utenti.length === 0) {
+                    containerTabella.html('<tr><td colspan="7" class="text-center text-muted">Nessun utente trovato</td></tr>');
+                    return;
+                }
+
+                const htmlTabella = utenti.map(utente => {
+                    const statoClasse = utente.is_active ? 'success' : 'secondary';
+                    const testoStato = utente.is_active ? 'Attivo' : 'Inattivo';
+                    const dataFormattata = new Date(utente.created_at).toLocaleDateString('it-IT');
+                    const testoBottoneStato = utente.is_active ? 'Disattiva' : 'Attiva';
+                    const iconaBottoneStato = utente.is_active ? 'bi-toggle-on' : 'bi-toggle-off';
+
+                    return `
+                        <tr>
+                            <td>${utente.user_id}</td>
+                            <td>${utente.full_name || 'N/A'}</td>
+                            <td>${utente.email}</td>
+                            <td><span class="badge bg-primary">${utente.role}</span></td>
+                            <td><span class="badge bg-${statoClasse}">${testoStato}</span></td>
+                            <td>${dataFormattata}</td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-primary edit-user-btn" 
+                                            data-user-id="${utente.user_id}" 
+                                            title="Modifica">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-outline-warning toggle-status-btn" 
+                                            data-user-id="${utente.user_id}" 
+                                            title="${testoBottoneStato}">
+                                        <i class="bi ${iconaBottoneStato}"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger delete-user-btn" 
+                                            data-user-id="${utente.user_id}" 
+                                            title="Elimina">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                containerTabella.html(htmlTabella);
+
+            } catch (errore) {
+                console.error("Errore nel caricamento degli utenti:", errore);
+                containerTabella.html('<tr><td colspan="7" class="text-center text-danger">Errore nel caricamento degli utenti</td></tr>');
+                mostraAlertUtenti(`Errore nel caricamento degli utenti: ${errore.message}`, 'danger');
+            }
+        }
+
+        /**
+         * Apre il modale per modificare un utente
+         */
+        async function apriModaleUtente(idUtente) {
+            $('#user-modal-feedback').empty().removeClass('alert-danger alert-success');
+
+            if (idUtente) {
+                $('#userModalLabel').text('Modifica Utente');
+                $('#saveUserBtn').text('Salva Modifiche');
+
+                try {
+                    const utente = await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}`, {method: 'GET'});
+                    const datiUtente = utente.data || utente;
+
+                    $('#userId').val(datiUtente.user_id);
+                    $('#userFullName').val(datiUtente.full_name || '');
+                    $('#userEmail').val(datiUtente.email);
+                    $('#userRole').val(datiUtente.role);
+                    $('#userPhoneNumber').val(datiUtente.phone_number || '');
+                    $('#userAddress').val(datiUtente.address || '');
+                    $('#userIsActive').prop('checked', datiUtente.is_active);
+
+                    if (datiUtente.role === 'artigiano') {
+                        $('#artisan-fields-user').removeClass('d-none');
+                        $('#userShopName').val(datiUtente.shop_name || '');
+                        $('#userShopDescription').val(datiUtente.shop_description || '');
+                    } else {
+                        $('#artisan-fields-user').addClass('d-none');
+                    }
+
+                } catch (errore) {
+                    console.error("Errore nel caricare i dati dell'utente per la modifica:", errore);
+                    mostraAlertModaleUtente(`Impossibile caricare i dati dell'utente. ${errore.message}`, 'danger');
+                    return;
+                }
+            }
+
+            if (modaleUtente) {
+                modaleUtente.show();
+            } else {
+                console.error("Istanza della modale utente non disponibile.");
+            }
+        }
+
+        /**
+         * Salva le modifiche di un utente
+         */
+        async function salvaUtente() {
+            const pulsanteSalva = $('#saveUserBtn');
+            const spinner = pulsanteSalva.find('.spinner-border');
+            const containerFeedback = $('#user-modal-feedback');
+
+            containerFeedback.empty().removeClass('alert-danger alert-success');
+            pulsanteSalva.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            const idUtente = $('#userId').val();
+
+            if (!idUtente) {
+                mostraAlertModaleUtente('ID utente mancante.', 'danger');
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+                return;
+            }
+
+            const datiUtente = {
+                full_name: $('#userFullName').val().trim(),
+                email: $('#userEmail').val().trim(),
+                role: $('#userRole').val(),
+                phone_number: $('#userPhoneNumber').val().trim() || null,
+                address: $('#userAddress').val().trim() || null,
+                is_active: $('#userIsActive').is(':checked')
+            };
+
+            if ($('#userRole').val() === 'artigiano') {
+                datiUtente.shop_name = $('#userShopName').val().trim() || null;
+                datiUtente.shop_description = $('#userShopDescription').val().trim() || null;
+            }
+
+            if (!datiUtente.full_name || !datiUtente.email || !datiUtente.role) {
+                mostraAlertModaleUtente('Per favore, compila tutti i campi obbligatori.', 'danger');
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}/adminupdate`, {
+                    method: 'PUT',
+                    body: datiUtente
+                });
+
+                mostraAlertModaleUtente('Utente modificato con successo!', 'success');
+                await caricaUtentiTutti();
+
+                setTimeout(() => {
+                    if (modaleUtente) modaleUtente.hide();
+                }, 1500);
+
+            } catch (errore) {
+                console.error(`Errore durante il salvataggio dell'utente:`, errore);
+                mostraAlertModaleUtente(`Errore: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            } finally {
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+            }
+        }
+
+        /**
+         * Elimina un utente
+         */
+        async function cancellaUtente(idUtente) {
+            if (!confirm(`Sei sicuro di voler eliminare l'utente ID ${idUtente}? Questa operazione non può essere annullata.`)) {
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}`, {method: 'DELETE'});
+                mostraAlertUtenti('Utente eliminato con successo!', 'success');
+                await caricaUtentiTutti();
+            } catch (errore) {
+                console.error(`Errore durante l'eliminazione dell'utente ID ${idUtente}:`, errore);
+                mostraAlertUtenti(`Errore durante l'eliminazione: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            }
+        }
+
+        /**
+         * Cambia lo stato (attivo/inattivo) di un utente
+         */
+        async function cambiaStatoUtente(idUtente) {
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}/togglestatus`, {method: 'PATCH'});
+                await caricaUtentiTutti();
+            } catch (errore) {
+                console.error(`Errore durante il cambio di stato dell'utente ID ${idUtente}:`, errore);
+                mostraAlertUtenti(`Errore durante il cambio di stato: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            }
+        }
+
+        /**
+         * Mostra un alert all'interno del modale utente
+         */
+        function mostraAlertModaleUtente(messaggio, tipo = 'danger') {
+            const containerFeedback = $('#user-modal-feedback');
+            containerFeedback.removeClass('alert-danger alert-success').addClass(`alert alert-${tipo}`).html(messaggio);
+        }
+
+        /**
+         * Mostra un alert nella sezione utenti
+         */
+        function mostraAlertUtenti(messaggio, tipo = 'success') {
+            const containerFeedback = $('#users-feedback');
+            const htmlAlert = `<div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+                                ${messaggio}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                              </div>`;
+            containerFeedback.html(htmlAlert);
+        }
     </script>
 </head>
 <body>
@@ -975,6 +1256,14 @@
                     type="button" role="tab" aria-controls="categories-management-tab-pane" aria-selected="false">
                 Gestione
                 Categorie
+            </button>
+        </li>
+        <li class="nav-item" role="presentation" id="users-tab-item" style="display: none;">
+            <button class="nav-link text-dark" id="users-management-tab" data-bs-toggle="tab"
+                    data-bs-target="#users-management-tab-pane"
+                    type="button" role="tab" aria-controls="users-management-tab-pane" aria-selected="false">
+                Gestione
+                Utenti
             </button>
         </li>
     </ul>
@@ -1133,6 +1422,40 @@
                             <tbody id="categories-table">
                             <tr>
                                 <td colspan="3" class="text-center text-muted">Caricamento categorie...</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestione Utenti -->
+        <div class="tab-pane fade" id="users-management-tab-pane" role="tabpanel"
+             aria-labelledby="users-management-tab" tabindex="0">
+            <div class="card p-2 shadow-sm">
+                <div class="card-header bg-white border-bottom-0">
+                    <h5 class="card-title mb-1 fw-bold">Gestione Utenti</h5>
+                    <p class="card-text text-muted small">Visualizza e gestisci tutti gli utenti della piattaforma.</p>
+                </div>
+                <div class="card-body">
+                    <div id="users-feedback" class="mb-3"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome Completo</th>
+                                <th>Email</th>
+                                <th>Ruolo</th>
+                                <th>Stato</th>
+                                <th>Data Registrazione</th>
+                                <th>Azioni</th>
+                            </tr>
+                            </thead>
+                            <tbody id="users-table">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">Caricamento utenti...</td>
                             </tr>
                             </tbody>
                         </table>
@@ -1302,6 +1625,83 @@
                                 <span class="spinner-border spinner-border-sm d-none me-1" role="status"
                                       aria-hidden="true"></span>
                                 Salva Categoria
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Modifica Utente -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="userForm">
+                <div class="modal-header bg-white border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="userModalLabel">Modifica Utente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-0">
+                    <div id="user-modal-feedback" class="mb-3"></div>
+                    <input type="hidden" id="userId">
+
+                    <div class="mb-3">
+                        <label for="userFullName" class="form-label">Nome Completo <span
+                                class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="userFullName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userEmail" class="form-label">Email <span
+                                class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="userEmail" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userRole" class="form-label">Ruolo <span
+                                class="text-danger">*</span></label>
+                        <select class="form-select" id="userRole" required>
+                            <option value="cliente">Cliente</option>
+                            <option value="artigiano">Artigiano</option>
+                            <option value="admin">Amministratore</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userPhoneNumber" class="form-label">Numero di Telefono</label>
+                        <input type="tel" class="form-control" id="userPhoneNumber">
+                    </div>
+                    <div class="mb-3">
+                        <label for="userAddress" class="form-label">Indirizzo</label>
+                        <textarea class="form-control" id="userAddress" rows="3"></textarea>
+                    </div>
+                    <div id="artisan-fields-user" class="d-none">
+                        <div class="mb-3">
+                            <label for="userShopName" class="form-label">Nome Negozio</label>
+                            <input type="text" class="form-control" id="userShopName">
+                        </div>
+                        <div class="mb-3">
+                            <label for="userShopDescription" class="form-label">Descrizione Negozio</label>
+                            <textarea class="form-control" id="userShopDescription" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="userIsActive" checked>
+                        <label class="form-check-label" for="userIsActive">
+                            Account Attivo
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top-0 pt-0">
+                    <div class="row gx-1 w-100">
+                        <div class="col-6">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="submit" class="btn btn-dark w-100" id="saveUserBtn">
+                                <span class="spinner-border spinner-border-sm d-none me-1" role="status"
+                                      aria-hidden="true"></span>
+                                Salva Utente
                             </button>
                         </div>
                     </div>
