@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
+import db from '../db/database.js';
 
-export const authenticateToken = (req, res, next) => {
+export const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -8,7 +9,7 @@ export const authenticateToken = (req, res, next) => {
         return res.status(401).json({message: 'Token di autenticazione mancante.'});
     }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, userPayload) => {
+    jwt.verify(token, process.env.JWT_SECRET, async (err, userPayload) => {
         if (err) {
             let status = 403;
             let message = 'Token non valido o scaduto.';
@@ -22,8 +23,23 @@ export const authenticateToken = (req, res, next) => {
             return res.status(status).json({message: message});
         }
 
-        req.user = userPayload;
-        next();
+        try {
+            const userResult = await db.query('SELECT is_active FROM users WHERE user_id = $1', [userPayload.userId]);
+            
+            if (userResult.rows.length === 0) {
+                return res.status(401).json({message: 'Utente non trovato. Effettuare nuovamente il login.'});
+            }
+
+            if (!userResult.rows[0].is_active) {
+                return res.status(403).json({message: 'Account disattivato. Contattare l\'amministratore.'});
+            }
+
+            req.user = userPayload;
+            next();
+        } catch (dbError) {
+            console.error('Errore durante la verifica dello stato utente:', dbError);
+            return res.status(500).json({message: 'Errore interno del server durante l\'autenticazione.'});
+        }
     });
 };
 
