@@ -143,20 +143,9 @@
                 e.preventDefault();
                 salvaUtente();
             });
-
             $('#users-table').on('click', '.edit-user-btn', function () {
                 const idUtente = $(this).data('user-id');
                 apriModaleUtente(idUtente);
-            });
-
-            $('#users-table').on('click', '.delete-user-btn', function () {
-                const idUtente = $(this).data('user-id');
-                cancellaUtente(idUtente);
-            });
-
-            $('#users-table').on('click', '.toggle-status-btn', function () {
-                const idUtente = $(this).data('user-id');
-                cambiaStatoUtente(idUtente);
             });
 
             $('#userRole').on('change', function () {
@@ -1001,13 +990,10 @@
                     containerTabella.html('<tr><td colspan="7" class="text-center text-muted">Nessun utente trovato</td></tr>');
                     return;
                 }
-
                 const htmlTabella = utenti.map(utente => {
                     const statoClasse = utente.is_active ? 'success' : 'secondary';
                     const testoStato = utente.is_active ? 'Attivo' : 'Inattivo';
                     const dataFormattata = new Date(utente.created_at).toLocaleDateString('it-IT');
-                    const testoBottoneStato = utente.is_active ? 'Disattiva' : 'Attiva';
-                    const iconaBottoneStato = utente.is_active ? 'bi-toggle-on' : 'bi-toggle-off';
 
                     return `
                         <tr>
@@ -1017,22 +1003,11 @@
                             <td><span class="badge bg-primary">${utente.role}</span></td>
                             <td><span class="badge bg-${statoClasse}">${testoStato}</span></td>
                             <td>${dataFormattata}</td>
-                            <td>
-                                <div class="btn-group btn-group-sm" role="group">
+                            <td>                                <div class="btn-group btn-group-sm" role="group">
                                     <button class="btn btn-outline-primary edit-user-btn" 
                                             data-user-id="${utente.user_id}" 
                                             title="Modifica">
                                         <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <button class="btn btn-outline-warning toggle-status-btn" 
-                                            data-user-id="${utente.user_id}" 
-                                            title="${testoBottoneStato}">
-                                        <i class="bi ${iconaBottoneStato}"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger delete-user-btn" 
-                                            data-user-id="${utente.user_id}" 
-                                            title="Elimina">
-                                        <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
                             </td>
@@ -1154,37 +1129,6 @@
             } finally {
                 pulsanteSalva.prop('disabled', false);
                 spinner.addClass('d-none');
-            }
-        }
-
-        /**
-         * Elimina un utente
-         */
-        async function cancellaUtente(idUtente) {
-            if (!confirm(`Sei sicuro di voler eliminare l'utente ID ${idUtente}? Questa operazione non può essere annullata.`)) {
-                return;
-            }
-
-            try {
-                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}`, {method: 'DELETE'});
-                mostraAlertUtenti('Utente eliminato con successo!', 'success');
-                await caricaUtentiTutti();
-            } catch (errore) {
-                console.error(`Errore durante l'eliminazione dell'utente ID ${idUtente}:`, errore);
-                mostraAlertUtenti(`Errore durante l'eliminazione: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
-            }
-        }
-
-        /**
-         * Cambia lo stato (attivo/inattivo) di un utente
-         */
-        async function cambiaStatoUtente(idUtente) {
-            try {
-                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}/togglestatus`, {method: 'PATCH'});
-                await caricaUtentiTutti();
-            } catch (errore) {
-                console.error(`Errore durante il cambio di stato dell'utente ID ${idUtente}:`, errore);
-                mostraAlertUtenti(`Errore durante il cambio di stato: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
             }
         }
 
