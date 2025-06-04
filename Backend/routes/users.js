@@ -560,7 +560,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, re
 
 /**
  * @swagger
- * /api/users/{id}/admin-update:
+ * /api/users/{id}/adminupdate:
  *   put:
  *     summary: Aggiorna tutti i dati di un utente (solo admin).
  *     tags: [Utenti]
@@ -640,7 +640,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, re
  *       '500':
  *         description: Errore interno del server.
  */
-router.put('/:id/admin-update', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.put('/:id/adminupdate', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const targetUserId = parseInt(req.params.id, 10);
 
     if (isNaN(targetUserId)) {
@@ -716,7 +716,7 @@ router.put('/:id/admin-update', authenticateToken, authorizeRoles('admin'), asyn
 
 /**
  * @swagger
- * /api/users/{id}/toggle-status:
+ * /api/users/{id}/togglestatus:
  *   patch:
  *     summary: Attiva o disattiva un account utente.
  *     tags: [Utenti]
@@ -782,7 +782,7 @@ router.put('/:id/admin-update', authenticateToken, authorizeRoles('admin'), asyn
  *       '500':
  *         description: Errore interno del server.
  */
-router.patch('/:id/toggle-status', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.patch('/:id/togglestatus', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const targetUserId = parseInt(req.params.id, 10);
 
     if (isNaN(targetUserId)) {
