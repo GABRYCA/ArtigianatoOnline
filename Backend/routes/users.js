@@ -469,4 +469,372 @@ router.put('/:id/changepassword', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     summary: Elimina un utente specifico.
+ *     tags: [Utenti]
+ *     description: Permette agli amministratori di eliminare un utente dal sistema. L'eliminazione è definitiva e rimuove tutti i dati associati all'utente.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           description: ID numerico dell'utente da eliminare.
+ *           example: 5
+ *     responses:
+ *       '200':
+ *         description: Utente eliminato con successo.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Utente eliminato con successo
+ *       '400':
+ *         description: Richiesta non valida (es. ID non numerico).
+ *       '401':
+ *         description: Non autorizzato (token mancante o non valido).
+ *       '403':
+ *         description: Accesso negato (l'utente non è admin).
+ *       '404':
+ *         description: Utente non trovato.
+ *       '409':
+ *         description: Impossibile eliminare l'utente (es. ha ordini attivi).
+ *       '500':
+ *         description: Errore interno del server.
+ */
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    const targetUserId = parseInt(req.params.id, 10);
+
+    if (isNaN(targetUserId)) {
+        return res.status(400).json({message: 'ID utente non valido.'});
+    }
+
+    try {
+        const userResult = await db.query('SELECT user_id, email, role FROM users WHERE user_id = $1', [targetUserId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({message: 'Utente non trovato.'});
+        }
+
+        const user = userResult.rows[0];
+
+        // Impedisci l'eliminazione di altri admin per sicurezza
+        if (user.role === 'admin') {
+            return res.status(403).json({message: 'Non è possibile eliminare un account amministratore.'});
+        }
+
+        // Verifica se l'utente ha ordini attivi
+        const ordersResult = await db.query('SELECT COUNT(*) as order_count FROM orders WHERE user_id = $1', [targetUserId]);
+        const orderCount = parseInt(ordersResult.rows[0].order_count, 10);
+        
+        if (orderCount > 0) {
+            return res.status(409).json({
+                message: 'Impossibile eliminare l\'utente: ha ordini associati. Disattivare l\'account invece di eliminarlo.',
+                ordini_associati: orderCount
+            });
+        }
+
+        // Eliminazione dell'utente
+        await db.query('DELETE FROM users WHERE user_id = $1', [targetUserId]);
+
+        res.json({
+            message: 'Utente eliminato con successo',
+            utente_eliminato: {
+                id: user.user_id,
+                email: user.email,
+                ruolo: user.role
+            }
+        });
+    } catch (error) {
+        console.error(`Errore nell'eliminare l'utente ${targetUserId}:`, error);
+        res.status(500).json({message: 'Errore del server durante l\'eliminazione dell\'utente.'});
+    }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/admin-update:
+ *   put:
+ *     summary: Aggiorna tutti i dati di un utente (solo admin).
+ *     tags: [Utenti]
+ *     description: Permette agli amministratori di modificare tutti i dati di un utente, inclusi email, ruolo e stato attivo. Questa è una funzione amministrativa avanzata.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           description: ID numerico dell'utente da aggiornare.
+ *           example: 5
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Nuova email dell'utente.
+ *                 example: nuovo.email@example.com
+ *               role:
+ *                 type: string
+ *                 enum: [cliente, artigiano, admin]
+ *                 description: Nuovo ruolo dell'utente.
+ *                 example: artigiano
+ *               full_name:
+ *                 type: string
+ *                 description: Nuovo nome completo dell'utente.
+ *                 example: Mario Bianchi
+ *               shop_name:
+ *                 type: string
+ *                 description: Nuovo nome del negozio.
+ *                 example: Bottega Creativa
+ *               shop_description:
+ *                 type: string
+ *                 description: Nuova descrizione del negozio.
+ *                 example: Creazioni uniche in ceramica
+ *               address:
+ *                 type: string
+ *                 description: Nuovo indirizzo.
+ *                 example: Via Nuova 10, Milano
+ *               phone_number:
+ *                 type: string
+ *                 description: Nuovo numero di telefono.
+ *                 example: "+39 333 1234567"
+ *               is_active:
+ *                 type: boolean
+ *                 description: Stato attivo dell'account.
+ *                 example: false
+ *     responses:
+ *       '200':
+ *         description: Utente aggiornato con successo.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Utente aggiornato con successo dall'amministratore
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       '400':
+ *         description: Richiesta non valida (es. email già esistente, ruolo non valido).
+ *       '401':
+ *         description: Non autorizzato (token mancante o non valido).
+ *       '403':
+ *         description: Accesso negato (l'utente non è admin).
+ *       '404':
+ *         description: Utente non trovato.
+ *       '500':
+ *         description: Errore interno del server.
+ */
+router.put('/:id/admin-update', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    const targetUserId = parseInt(req.params.id, 10);
+
+    if (isNaN(targetUserId)) {
+        return res.status(400).json({message: 'ID utente non valido.'});
+    }
+
+    const {email, role, full_name, shop_name, shop_description, address, phone_number, is_active} = req.body;
+
+    if (!email && !role && !full_name && !shop_name && !shop_description && !address && !phone_number && is_active === undefined) {
+        return res.status(400).json({message: 'Nessun dato fornito per l\'aggiornamento.'});
+    }
+
+    try {
+        const currentUserResult = await db.query('SELECT * FROM users WHERE user_id = $1', [targetUserId]);
+        if (currentUserResult.rows.length === 0) {
+            return res.status(404).json({message: 'Utente non trovato.'});
+        }
+        const currentUser = currentUserResult.rows[0];
+
+        // Validazione ruolo
+        const validRoles = ['cliente', 'artigiano', 'admin'];
+        if (role && !validRoles.includes(role)) {
+            return res.status(400).json({message: 'Ruolo non valido. Ruoli consentiti: cliente, artigiano, admin.'});
+        }
+
+        // Verifica email univoca se viene cambiata
+        if (email && email !== currentUser.email) {
+            const emailCheckResult = await db.query('SELECT user_id FROM users WHERE email = $1 AND user_id != $2', [email, targetUserId]);
+            if (emailCheckResult.rows.length > 0) {
+                return res.status(400).json({message: 'Email già esistente nel sistema.'});
+            }
+        }
+
+        // Preparazione dei nuovi valori
+        const newEmail = email !== undefined ? email : currentUser.email;
+        const newRole = role !== undefined ? role : currentUser.role;
+        const newFullName = full_name !== undefined ? full_name : currentUser.full_name;
+        const newShopName = shop_name !== undefined ? shop_name : currentUser.shop_name;
+        const newShopDescription = shop_description !== undefined ? shop_description : currentUser.shop_description;
+        const newAddress = address !== undefined ? address : currentUser.address;
+        const newPhoneNumber = phone_number !== undefined ? phone_number : currentUser.phone_number;
+        const newIsActive = is_active !== undefined ? is_active : currentUser.is_active;
+
+        // Se il ruolo cambia da artigiano a cliente, rimuovi i dati del negozio
+        const finalShopName = newRole === 'cliente' ? null : newShopName;
+        const finalShopDescription = newRole === 'cliente' ? null : newShopDescription;
+
+        const result = await db.query(
+            `UPDATE users 
+             SET email = $1, 
+                 role = $2, 
+                 full_name = $3, 
+                 shop_name = $4, 
+                 shop_description = $5, 
+                 address = $6, 
+                 phone_number = $7, 
+                 is_active = $8,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = $9
+             RETURNING user_id, email, role, full_name, shop_name, shop_description, address, phone_number, is_active, created_at, updated_at`,
+            [newEmail, newRole, newFullName, finalShopName, finalShopDescription, newAddress, newPhoneNumber, newIsActive, targetUserId]
+        );
+
+        res.json({
+            message: 'Utente aggiornato con successo dall\'amministratore',
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error(`Errore nell'aggiornamento amministrativo dell'utente ${targetUserId}:`, error);
+        res.status(500).json({message: 'Errore del server durante l\'aggiornamento dell\'utente.'});
+    }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/toggle-status:
+ *   patch:
+ *     summary: Attiva o disattiva un account utente.
+ *     tags: [Utenti]
+ *     description: Permette agli amministratori di attivare o disattivare un account utente senza eliminarlo. Utile per sospensioni temporanee.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           description: ID numerico dell'utente di cui modificare lo stato.
+ *           example: 5
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - is_active
+ *             properties:
+ *               is_active:
+ *                 type: boolean
+ *                 description: Nuovo stato dell'account (true = attivo, false = disattivato).
+ *                 example: false
+ *               motivo:
+ *                 type: string
+ *                 description: Motivo del cambio di stato (opzionale).
+ *                 example: Violazione delle condizioni d'uso
+ *     responses:
+ *       '200':
+ *         description: Stato utente modificato con successo.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Account utente disattivato con successo
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     user_id:
+ *                       type: integer
+ *                       example: 5
+ *                     email:
+ *                       type: string
+ *                       example: utente@example.com
+ *                     is_active:
+ *                       type: boolean
+ *                       example: false
+ *       '400':
+ *         description: Richiesta non valida.
+ *       '401':
+ *         description: Non autorizzato.
+ *       '403':
+ *         description: Accesso negato (l'utente non è admin).
+ *       '404':
+ *         description: Utente non trovato.
+ *       '500':
+ *         description: Errore interno del server.
+ */
+router.patch('/:id/toggle-status', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    const targetUserId = parseInt(req.params.id, 10);
+
+    if (isNaN(targetUserId)) {
+        return res.status(400).json({message: 'ID utente non valido.'});
+    }
+
+    const {is_active, motivo} = req.body;
+
+    if (is_active === undefined) {
+        return res.status(400).json({message: 'Il campo is_active è obbligatorio.'});
+    }
+
+    if (typeof is_active !== 'boolean') {
+        return res.status(400).json({message: 'Il campo is_active deve essere true o false.'});
+    }    try {
+        const userResult = await db.query('SELECT user_id, email, role, is_active FROM users WHERE user_id = $1', [targetUserId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({message: 'Utente non trovato.'});
+        }
+
+        const user = userResult.rows[0];
+
+        // Impedisci la disattivazione di account admin
+        if (user.role === 'admin' && !is_active) {
+            return res.status(403).json({message: 'Non è possibile disattivare un account amministratore.'});
+        }
+
+        // Se lo stato è già quello richiesto
+        if (user.is_active === is_active) {
+            const statoAttuale = is_active ? 'attivo' : 'disattivato';
+            return res.status(400).json({message: `L'account è già ${statoAttuale}.`});
+        }
+
+        const result = await db.query(
+            'UPDATE users SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2 RETURNING user_id, email, is_active',
+            [is_active, targetUserId]
+        );
+
+        const statoNuovo = is_active ? 'attivato' : 'disattivato';
+        const messaggioLog = motivo ? ` Motivo: ${motivo}` : '';
+        
+        console.log(`Admin ha ${statoNuovo} l'account utente ${user.email} (ID: ${targetUserId}).${messaggioLog}`);
+
+        res.json({
+            message: `Account utente ${statoNuovo} con successo`,
+            user: result.rows[0],
+            motivo: motivo || null
+        });
+    } catch (error) {
+        console.error(`Errore nel modificare lo stato dell'utente ${targetUserId}:`, error);
+        res.status(500).json({message: 'Errore del server durante la modifica dello stato dell\'utente.'});
+    }
+});
+
 export default router;
