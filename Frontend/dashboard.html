@@ -148,6 +148,11 @@
                 apriModaleUtente(idUtente);
             });
 
+            $('#users-table').on('click', '.delete-user-btn', function () {
+                const idUtente = $(this).data('user-id');
+                eliminaUtente(idUtente);
+            });
+
             $('#userRole').on('change', function () {
                 const ruoloSelezionato = $(this).val();
                 if (ruoloSelezionato === 'artigiano') {
@@ -1002,12 +1007,16 @@
                             <td>${utente.email}</td>
                             <td><span class="badge bg-primary">${utente.role}</span></td>
                             <td><span class="badge bg-${statoClasse}">${testoStato}</span></td>
-                            <td>${dataFormattata}</td>
-                            <td>                                <div class="btn-group btn-group-sm" role="group">
+                            <td>${dataFormattata}</td>                            <td>                                <div class="btn-group btn-group-sm" role="group">
                                     <button class="btn btn-outline-primary edit-user-btn" 
                                             data-user-id="${utente.user_id}" 
                                             title="Modifica">
                                         <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger delete-user-btn" 
+                                            data-user-id="${utente.user_id}" 
+                                            title="Elimina">
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
                             </td>
@@ -1138,6 +1147,34 @@
         function mostraAlertModaleUtente(messaggio, tipo = 'danger') {
             const containerFeedback = $('#user-modal-feedback');
             containerFeedback.removeClass('alert-danger alert-success').addClass(`alert alert-${tipo}`).html(messaggio);
+        }
+
+        /**
+         * Elimina un utente dal sistema
+         */
+        async function eliminaUtente(idUtente) {
+            if (!idUtente) {
+                mostraAlertUtenti('ID utente non valido.', 'danger');
+                return;
+            }
+
+            const conferma = confirm('Sei sicuro di voler eliminare questo utente? Questa azione non può essere annullata.');
+            if (!conferma) {
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}`, {
+                    method: 'DELETE'
+                });
+
+                mostraAlertUtenti('Utente eliminato con successo!', 'success');
+                await caricaUtentiTutti();
+
+            } catch (errore) {
+                console.error('Errore durante l\'eliminazione dell\'utente:', errore);
+                mostraAlertUtenti(`Errore nell'eliminazione dell'utente: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            }
         }
 
         /**
