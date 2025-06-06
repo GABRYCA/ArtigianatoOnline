@@ -19,13 +19,8 @@
     <!-- JS -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
             integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
         const urlBaseApi = "";
-        let datiOrdineGlobali = null;
-        let datiOrdineGrezzi = null;
-        let datiPagamentoCaricati = false;
-        let datiPagamentoGlobali = null;
 
         $(document).ready(function () {
             const parametriUrl = new URLSearchParams(window.location.search);
@@ -43,112 +38,8 @@
                 $('#indicatore-caricamento').hide();
                 return;
             }
+
             recuperaDatiOrdine(idOrdine, tokenAutenticazione);
-
-            $('#paymentModal').on('show.bs.modal', function () {
-                if (datiOrdineGlobali && datiOrdineGrezzi) {
-                    $('#payment-order-id').text(datiOrdineGlobali.id);
-                    $('#payment-order-total').text(formattaPrezzo(parseFloat(datiOrdineGrezzi.total_amount)));
-                    $('#payment-order-date').text(datiOrdineGlobali.date);
-                    $('#payment-bank-order-ref').text(datiOrdineGlobali.id);
-                    $('#payment-bank-customer-name').text(datiOrdineGlobali.customer.name);
-
-                    $('#payment-feedback').empty();
-                    $('#payment-method-tabs-content .form-control').removeClass('is-valid is-invalid');
-                }
-            });
-
-            $('#payment-card-number').on('input', function () {
-                let valore = $(this).val().replace(/\s/g, '').replace(/[^0-9]/g, '');
-                let valoreFormattato = valore.match(/.{1,4}/g)?.join(' ') || valore;
-                if (valoreFormattato.length > 19) valoreFormattato = valoreFormattato.substring(0, 19);
-                $(this).val(valoreFormattato);
-
-                const numeroSenzaSpazi = valore;
-                if (numeroSenzaSpazi.length === 16) {
-                    $(this).removeClass('is-invalid').addClass('is-valid');
-                } else if (numeroSenzaSpazi.length > 0) {
-                    $(this).removeClass('is-valid').addClass('is-invalid');
-                } else {
-                    $(this).removeClass('is-valid is-invalid');
-                }
-            });
-
-            $('#payment-card-expiry').on('input', function () {
-                let valore = $(this).val().replace(/[^0-9]/g, '');
-                if (valore.length >= 2) {
-                    valore = valore.substring(0, 2) + '/' + valore.substring(2, 4);
-                }
-                $(this).val(valore);
-
-                if (valore.length === 5) {
-                    const [mese, anno] = valore.split('/');
-                    const meseNum = parseInt(mese, 10);
-                    const annoNum = parseInt('20' + anno, 10);
-                    const dataCorrente = new Date();
-                    const annoCorrente = dataCorrente.getFullYear();
-                    const meseCorrente = dataCorrente.getMonth() + 1;
-
-                    if (meseNum >= 1 && meseNum <= 12 && annoNum >= annoCorrente &&
-                        !(annoNum === annoCorrente && meseNum < meseCorrente)) {
-                        $(this).removeClass('is-invalid').addClass('is-valid');
-                    } else {
-                        $(this).removeClass('is-valid').addClass('is-invalid');
-                    }
-                } else if (valore.length > 0) {
-                    $(this).removeClass('is-valid').addClass('is-invalid');
-                } else {
-                    $(this).removeClass('is-valid is-invalid');
-                }
-            });
-
-            $('#payment-card-cvv').on('input', function () {
-                let valore = $(this).val().replace(/[^0-9]/g, '');
-                if (valore.length > 4) valore = valore.substring(0, 4);
-                $(this).val(valore);
-
-                if (valore.length >= 3) {
-                    $(this).removeClass('is-invalid').addClass('is-valid');
-                } else if (valore.length > 0) {
-                    $(this).removeClass('is-valid').addClass('is-invalid');
-                } else {
-                    $(this).removeClass('is-valid is-invalid');
-                }
-            });
-
-            $('#payment-card-name').on('input', function () {
-                const valore = $(this).val().trim();
-                if (valore.length >= 3 && valore.includes(' ')) {
-                    $(this).removeClass('is-invalid').addClass('is-valid');
-                } else if (valore.length > 0) {
-                    $(this).removeClass('is-valid').addClass('is-invalid');
-                } else {
-                    $(this).removeClass('is-valid is-invalid');
-                }
-            });
-
-            $('#payment-paypal-email').on('input', function () {
-                const valore = $(this).val().trim();
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (emailRegex.test(valore)) {
-                    $(this).removeClass('is-invalid').addClass('is-valid');
-                } else if (valore.length > 0) {
-                    $(this).removeClass('is-valid').addClass('is-invalid');
-                } else {
-                    $(this).removeClass('is-valid is-invalid');
-                }
-            });
-
-            $('#payment-method-tabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (event) {
-                $('#payment-method-tabs-content .form-control').removeClass('is-valid is-invalid');
-                $('#payment-feedback').empty();
-            });
-
-            $('#payment-tab').on('shown.bs.tab', function () {
-                if (!datiPagamentoCaricati && datiOrdineGrezzi) {
-                    caricaDatiPagamento(datiOrdineGrezzi.order_id);
-                }
-            });
         });
 
         /**
@@ -197,7 +88,6 @@
          */
         function recuperaDatiOrdine(idOrdine, token) {
             mostraStatoCaricamento(true);
-            resetDatiPagamento();
 
             $.ajax({
                 url: `${urlBaseApi}/api/orders/${idOrdine}`,
@@ -212,9 +102,7 @@
                         return;
                     }
                     try {
-                        datiOrdineGrezzi = datiGrezzi;
                         const datiOrdineElaborati = mappaDatiOrdine(datiGrezzi);
-                        datiOrdineGlobali = datiOrdineElaborati;
                         popolaPagina(datiOrdineElaborati);
                         mostraStatoCaricamento(false);
                     } catch (erroreElaborazione) {
@@ -230,121 +118,10 @@
         }
 
         /**
-         * Carica i dati di pagamento per l'ordine specificato
-         * @param {number} idOrdine - ID dell'ordine per cui recuperare i dati di pagamento
-         */
-        function caricaDatiPagamento(idOrdine) {
-            const tokenAutenticazione = localStorage.getItem('sessionToken');
-
-            $('#payment-method').text('Caricamento...');
-            $('#payment-status').text('Caricamento...');
-            $('#payment-total').text('Caricamento...');
-
-            $.ajax({
-                url: `${urlBaseApi}/api/payments/order/${idOrdine}`,
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${tokenAutenticazione}`
-                },
-                success: function (datiPagamento) {
-                    datiPagamentoGlobali = datiPagamento;
-                    datiPagamentoCaricati = true;
-                    aggiornaPagamentoDati(datiPagamento);
-                }, error: function (rispostaHttp, testoStato, errore) {
-                    if (rispostaHttp.status === 404) {
-                        console.info('Nessun pagamento registrato per questo ordine');
-                        if (datiOrdineGrezzi && datiOrdineGrezzi.status === 'pending') {
-                            $('#payment-method').text('In attesa');
-                            $('#payment-status').text('In attesa di pagamento').removeClass().addClass('text-warning');
-                            $('#payment-total').text('€ 0.00');
-                        } else {
-                            aggiornaPagamentoDati(null);
-                        }
-                    } else {
-                        console.error('Errore nel caricamento dei dati di pagamento:', errore);
-                        $('#payment-method').text('Errore di caricamento');
-                        $('#payment-status').text('Errore').removeClass().addClass('text-danger');
-                        $('#payment-total').text('N/D');
-                    }
-                    datiPagamentoCaricati = true;
-                }
-            });
-        }
-
-        /**
-         * Aggiorna l'interfaccia della tab pagamento con i dati ricevuti
-         * @param {Object|null} datiPagamento - Dati del pagamento o null se non disponibili
-         */
-        function aggiornaPagamentoDati(datiPagamento) {
-            if (datiPagamento) {
-                const mappaMetodiPagamento = {
-                    'credit_card': 'Carta di Credito',
-                    'paypal': 'PayPal',
-                    'bank_transfer': 'Bonifico Bancario',
-                    'other': 'Altro'
-                };
-
-                const mappaStatiPagamento = {
-                    'pending': {text: 'In Attesa', color: 'warning'},
-                    'completed': {text: 'Completato', color: 'success'},
-                    'failed': {text: 'Fallito', color: 'danger'},
-                    'refunded': {text: 'Rimborsato', color: 'info'}
-                };
-
-                const metodoPagamento = mappaMetodiPagamento[datiPagamento.payment_method] || datiPagamento.payment_method || 'N/D';
-                const infoStato = mappaStatiPagamento[datiPagamento.status] || {
-                    text: datiPagamento.status || 'N/D',
-                    color: 'muted'
-                };
-
-                $('#payment-method').text(metodoPagamento);
-                $('#payment-status').text(infoStato.text).removeClass().addClass(`text-${infoStato.color}`);
-                $('#payment-total').text(formattaPrezzo(parseFloat(datiPagamento.amount)));
-
-                if (datiPagamento.transaction_id) {
-                    $('.payment-transaction-info').remove();
-
-                    const infoTransazione = $(`
-                        <div class="payment-transaction-info d-flex justify-content-between small mt-2 pt-2 border-top">
-                            <span class="text-muted">ID Transazione</span>
-                            <span class="font-monospace small">${datiPagamento.transaction_id}</span>
-                        </div>
-                    `);
-                    $('#payment-total').parent().after(infoTransazione);
-                }
-
-                if (datiPagamento.payment_date) {
-                    $('.payment-date-info').remove();
-
-                    const dataFormattata = formattaData(datiPagamento.payment_date, true);
-                    const infoData = $(`
-                        <div class="payment-date-info d-flex justify-content-between small mt-1">
-                            <span class="text-muted">Data Pagamento</span>
-                            <span>${dataFormattata}</span>
-                        </div>
-                    `);
-
-                    const ultimoElemento = $('.payment-transaction-info').length > 0 ?
-                        $('.payment-transaction-info') :
-                        $('#payment-total').parent();
-                    ultimoElemento.before(infoData);
-                }
-
-            } else {
-                $('#payment-method').text('N/D');
-                $('#payment-status').text('N/D').removeClass().addClass('text-muted');
-                $('#payment-total').text('€ 0.00');
-
-                $('.payment-transaction-info, .payment-date-info').remove();
-            }
-        }
-
-        /**
          * Mappa i dati grezzi dell'ordine in un formato strutturato per la visualizzazione
          * @param {Object} datiGrezzi - Dati grezzi ricevuti dall'API
          * @returns {Object} Dati dell'ordine mappati e formattati
-         */
-        function mappaDatiOrdine(datiGrezzi) {
+         */        function mappaDatiOrdine(datiGrezzi) {
             const mappaStati = {
                 pending: {text: "In Attesa di Pagamento", progress: 10, icon: 'bi-hourglass-split', color: 'warning'},
                 paid: {text: "Pagato", progress: 20, icon: 'bi-credit-card', color: 'info'},
@@ -357,14 +134,32 @@
                 default: {text: datiGrezzi.status, progress: 50, icon: 'bi-question-circle', color: 'secondary'}
             };
             const infoStatoCorrente = mappaStati[datiGrezzi.status] || mappaStati.default;
+            const mappaStatiPagamento = {
+                pending: {text: 'In attesa', color: 'warning'},
+                completed: {text: 'Completato', color: 'success'},
+                failed: {text: 'Fallito', color: 'danger'},
+                refunded: {text: 'Rimborsato', color: 'info'},
+                default: {text: datiGrezzi.payment?.status || 'N/D', color: 'muted'}
+            };
+            const infoStatoPagamento = datiGrezzi.payment ? (mappaStatiPagamento[datiGrezzi.payment.status] || mappaStatiPagamento.default) : mappaStatiPagamento.default;
+
+            const mappaMetodiPagamento = {
+                credit_card: 'Carta di Credito',
+                paypal: 'PayPal',
+                bank_transfer: 'Bonifico Bancario',
+                other: 'Altro',
+                default: datiGrezzi.payment?.payment_method || 'N/D'
+            };
+            const testoMetodoPagamento = datiGrezzi.payment ? (mappaMetodiPagamento[datiGrezzi.payment.payment_method] || mappaMetodiPagamento.default) : mappaMetodiPagamento.default;
+
 
             return {
                 id: datiGrezzi.order_id,
                 date: formattaData(datiGrezzi.order_date),
                 status: infoStatoCorrente.text,
                 statusColor: infoStatoCorrente.color,
-                statusIcon: infoStatoCorrente.icon, progress: infoStatoCorrente.progress,
-                rawStatus: datiGrezzi.status,
+                statusIcon: infoStatoCorrente.icon,
+                progress: infoStatoCorrente.progress,
                 lastUpdate: formattaData(datiGrezzi.updated_at, true),
                 items: datiGrezzi.items.map(articolo => ({
                     id: articolo.product_id,
@@ -374,13 +169,19 @@
                     image: articolo.product_image_url || '../images/favicon.png',
                     artisan: articolo.artisan_shop_name || `Artigiano ID: ${articolo.artisan_id}`,
                     sku: articolo.product_sku || 'N/D'
-                })),
-                shipping: {
+                })), shipping: {
                     method: traduciMetodoSpedizione(datiGrezzi.shipping_method),
                     address: datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito'],
                     trackingNumber: datiGrezzi.tracking_number || 'Non disponibile',
-                }, billing: {
+                },
+                billing: {
                     address: datiGrezzi.billing_address ? datiGrezzi.billing_address.split(',').map(p => p.trim()) : (datiGrezzi.shipping_address ? datiGrezzi.shipping_address.split(',').map(p => p.trim()) : ['Indirizzo non fornito']),
+                },
+                payment: {
+                    total: datiGrezzi.total_amount,
+                    status: infoStatoPagamento.text,
+                    statusColor: infoStatoPagamento.color,
+                    method: testoMetodoPagamento,
                 },
                 customer: {
                     name: datiGrezzi.customer_full_name || `Cliente ID: ${datiGrezzi.customer_id}`,
@@ -450,135 +251,17 @@
             $('#billing-order-date').text(datiOrdine.date);
             $('#billing-order-id').text(datiOrdine.id);
 
+            $('#payment-method').text(datiOrdine.payment.method);
+            $('#payment-status').text(datiOrdine.payment.status).removeClass().addClass(`text-${datiOrdine.payment.statusColor}`);
+            $('#payment-total').text(`€ ${datiOrdine.payment.total}`);
+
             $('#summary-order-id').text(datiOrdine.id);
             $('#summary-date').text(datiOrdine.date);
             const badgeStatoRiepilogo = $('#summary-status-badge');
             badgeStatoRiepilogo.text(datiOrdine.status).removeClass().addClass(`badge bg-${datiOrdine.statusColor}`);
-
             $('#summary-customer-name').text(datiOrdine.customer.name);
             $('#summary-customer-email').text(datiOrdine.customer.email);
-            $('#summary-total').text(formattaPrezzo(parseFloat(datiOrdineGrezzi.total_amount)));
-            gestisciPulsantePagaNora(datiOrdine);
-            gestisciPulsanteFattura(datiOrdine);
-        }
-
-        /**
-         * Gestisce pulsante "Scarica fattura" in base allo stato dell'ordine
-         * @param datiOrdine
-         */
-        function gestisciPulsanteFattura(datiOrdine) {
-            const pulsanteFattura = $('.card-body.d-grid.gap-2 button:contains("Scarica fattura")');
-
-            if (datiOrdine.rawStatus === 'delivered') {
-                pulsanteFattura.prop('disabled', false).on('click', function () {
-                    generaFatturaPDF(datiOrdine);
-                });
-            } else {
-                pulsanteFattura.prop('disabled', true);
-            }
-        }
-
-        /**
-         * Genera una fattura in formato PDF dell'ordine
-         * @param datiOrdine
-         */
-        function generaFatturaPDF(datiOrdine) {
-            const {jsPDF} = window.jspdf;
-            const doc = new jsPDF();
-
-            const dataCorrente = new Date().toLocaleDateString('it-IT');
-            const numeroFattura = `FAT-${datiOrdine.id}-${new Date().getFullYear()}`;
-
-            doc.setFontSize(20);
-            doc.setFont(undefined, 'bold');
-            doc.text('FATTURA', 105, 30, {align: 'center'});
-
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Numero Fattura: ${numeroFattura}`, 20, 50);
-            doc.text(`Data Emissione: ${dataCorrente}`, 20, 60);
-            doc.text(`Data Ordine: ${datiOrdine.date}`, 20, 70);
-
-            doc.setFont(undefined, 'bold');
-            doc.text('DATI VENDITORE', 20, 90);
-            doc.setFont(undefined, 'normal');
-            doc.text('Artigianato Online', 20, 100);
-            doc.text('Via Roma, 123', 20, 110);
-            doc.text('20100 Milano (MI)', 20, 120);
-            doc.text('P.IVA: IT12345678901', 20, 130);
-
-            doc.setFont(undefined, 'bold');
-            doc.text('DATI CLIENTE', 120, 90);
-            doc.setFont(undefined, 'normal');
-            doc.text(datiOrdine.customer.name, 120, 100);
-            doc.text(datiOrdine.customer.email, 120, 110);
-
-            const indirizzoFatturazione = datiOrdine.billing.address;
-            let yPosition = 120;
-            indirizzoFatturazione.forEach(riga => {
-                doc.text(riga, 120, yPosition);
-                yPosition += 10;
-            });
-
-            doc.setFont(undefined, 'bold');
-            doc.text('DETTAGLI ORDINE', 20, 160);
-            doc.setFont(undefined, 'normal');
-
-            let yProdotti = 175;
-            doc.text('Descrizione', 20, yProdotti);
-            doc.text('Qtà', 120, yProdotti);
-            doc.text('Prezzo Unit.', 140, yProdotti);
-            doc.text('Totale', 170, yProdotti);
-
-            doc.line(20, yProdotti + 5, 190, yProdotti + 5);
-            yProdotti += 15;
-
-            let totaleOrdine = 0;
-
-            datiOrdine.items.forEach(articolo => {
-                const prezzoUnitario = parseFloat(articolo.price);
-                const quantita = parseInt(articolo.quantity);
-                const totaleArticolo = prezzoUnitario * quantita;
-                totaleOrdine += totaleArticolo;
-
-                const nomeArticolo = articolo.name.length > 30 ?
-                    articolo.name.substring(0, 30) + '...' : articolo.name;
-
-                doc.text(nomeArticolo, 20, yProdotti);
-                doc.text(`${quantita}`, 120, yProdotti);
-                doc.text(`€ ${prezzoUnitario.toFixed(2)}`, 140, yProdotti);
-                doc.text(`€ ${totaleArticolo.toFixed(2)}`, 170, yProdotti);
-
-                yProdotti += 10;
-                doc.text(`Artigiano: ${articolo.artisan}`, 25, yProdotti);
-                doc.text(`SKU: ${articolo.sku}`, 25, yProdotti + 8);
-                yProdotti += 20;
-            });
-
-            doc.line(20, yProdotti, 190, yProdotti);
-            yProdotti += 10;
-
-            doc.setFont(undefined, 'bold');
-            doc.text(`TOTALE: € ${totaleOrdine.toFixed(2)}`, 120, yProdotti);
-
-            yProdotti += 20;
-            doc.setFont(undefined, 'normal');
-            doc.text('Metodo di Spedizione:', 20, yProdotti);
-            doc.text(datiOrdine.shipping.method, 70, yProdotti);
-
-            if (datiOrdine.shipping.trackingNumber && datiOrdine.shipping.trackingNumber !== 'Non disponibile') {
-                yProdotti += 10;
-                doc.text('Codice Tracking:', 20, yProdotti);
-                doc.text(datiOrdine.shipping.trackingNumber, 70, yProdotti);
-            }
-
-            yProdotti += 20;
-            doc.setFontSize(10);
-            doc.text('Fattura generata automaticamente da Artigianato Online', 20, yProdotti);
-            doc.text(`Data di generazione: ${dataCorrente}`, 20, yProdotti + 10);
-
-            const nomeFile = `Fattura_Ordine_${datiOrdine.id}.pdf`;
-            doc.save(nomeFile);
+            $('#summary-total').text(`€ ${datiOrdine.payment.total}`);
         }
 
         /**
@@ -591,274 +274,11 @@
                 'standard': 'Spedizione standard',
                 'express': 'Spedizione espressa',
                 'free': 'Spedizione gratuita',
-                'Spedizione standard': 'Spedizione standard',
+                'Spedizione standard': 'Spedizione standard', // Per compatibilità con valori già salvati
                 'Spedizione espressa': 'Spedizione espressa',
                 'Spedizione gratuita': 'Spedizione gratuita'
             };
             return traduzioni[metodo] || metodo || 'N/D';
-        }
-
-        /**
-         * Gestisce la visualizzazione del pulsante "Paga ora" per ordini in attesa di pagamento
-         * @param {Object} datiOrdine - Dati dell'ordine
-         */        function gestisciPulsantePagaNora(datiOrdine) {
-            const contenitoreAzioni = $('.card-body.d-grid.gap-2');
-
-            contenitoreAzioni.find('#pay-now-btn').remove();
-
-            if (datiOrdine.rawStatus === 'pending') {
-                const pulsantePagaNora = $(`
-                    <button type="button" id="pay-now-btn" class="btn btn-warning text-start py-2" data-bs-toggle="modal" data-bs-target="#paymentModal">
-                        <i class="bi bi-credit-card me-2"></i>Paga ora                    </button>
-                `);
-
-                contenitoreAzioni.prepend(pulsantePagaNora);
-            }
-        }
-
-        /**
-         * Formatta un prezzo in formato euro
-         * @param {number} prezzo - Il prezzo da formattare
-         * @returns {string} Il prezzo formattato (es. "€12.50")
-         */
-        function formattaPrezzo(prezzo) {
-            if (typeof prezzo !== 'number' || isNaN(prezzo)) {
-                console.warn("Tentativo di formattare un prezzo non valido:", prezzo);
-                return '€--.--';
-            }
-            return `€${prezzo.toFixed(2)}`;
-        }
-
-        /**
-         * Mostra un alert Bootstrap
-         * @param {string} messaggio - Il messaggio da mostrare
-         * @param {string} tipo - Il tipo di alert (success, danger, warning, info)
-         * @param {string} contenitore - ID del contenitore dove mostrare l'alert
-         */
-        function mostraAlert(messaggio, tipo, contenitore = 'payment-feedback') {
-            const classeAlert = `alert alert-${tipo} alert-dismissible fade show`;
-            const htmlAlert = `
-                <div class="${classeAlert}" role="alert">
-                    ${messaggio}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            `;
-            $(`#${contenitore}`).html(htmlAlert);
-        }
-
-        /**
-         * Valida i dati di pagamento in base al metodo selezionato
-         * @param {string} metodoPagamento - Il metodo di pagamento selezionato
-         * @returns {boolean} - True se la validazione è passata
-         */
-        function validaDatiPagamento(metodoPagamento) {
-            let valido = true;
-
-            if (metodoPagamento === 'credit_card') {
-                const numeroCartaElement = $('#payment-card-number');
-                const nomeCartaElement = $('#payment-card-name');
-                const scadenzaElement = $('#payment-card-expiry');
-                const cvvElement = $('#payment-card-cvv');
-
-                const numeroCarta = numeroCartaElement.val().replace(/\s/g, '');
-                const nomeCarta = nomeCartaElement.val().trim();
-                const scadenza = scadenzaElement.val();
-                const cvv = cvvElement.val();
-
-                if (numeroCarta.length !== 16 || !/^\d{16}$/.test(numeroCarta)) {
-                    numeroCartaElement.addClass('is-invalid').removeClass('is-valid');
-                    valido = false;
-                } else {
-                    numeroCartaElement.addClass('is-valid').removeClass('is-invalid');
-                }
-
-                if (nomeCarta.length < 3 || !nomeCarta.includes(' ')) {
-                    nomeCartaElement.addClass('is-invalid').removeClass('is-valid');
-                    valido = false;
-                } else {
-                    nomeCartaElement.addClass('is-valid').removeClass('is-invalid');
-                }
-
-                const [mese, anno] = scadenza.split('/');
-                const meseNum = parseInt(mese, 10);
-                const annoNum = parseInt('20' + anno, 10);
-                const dataCorrente = new Date();
-                const annoCorrente = dataCorrente.getFullYear();
-                const meseCorrente = dataCorrente.getMonth() + 1;
-
-                if (scadenza.length === 5 && mese && anno &&
-                    meseNum >= 1 && meseNum <= 12 && annoNum >= annoCorrente &&
-                    !(annoNum === annoCorrente && meseNum < meseCorrente)) {
-                    scadenzaElement.removeClass('is-invalid').addClass('is-valid');
-                } else {
-                    scadenzaElement.removeClass('is-valid').addClass('is-invalid');
-                    valido = false;
-                }
-
-                if (cvv.length >= 3 && cvv.length <= 4 && /^\d{3,4}$/.test(cvv)) {
-                    cvvElement.removeClass('is-invalid').addClass('is-valid');
-                } else {
-                    cvvElement.removeClass('is-valid').addClass('is-invalid');
-                    valido = false;
-                }
-            } else if (metodoPagamento === 'paypal') {
-                const emailElement = $('#payment-paypal-email');
-                const email = emailElement.val().trim();
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-                if (!emailRegex.test(email)) {
-                    emailElement.addClass('is-invalid').removeClass('is-valid');
-                    valido = false;
-                } else {
-                    emailElement.addClass('is-valid').removeClass('is-invalid');
-                }
-            }
-
-            return valido;
-        }
-
-        /**
-         * Simula l'elaborazione del pagamento e genera un transaction_id
-         * @param {string} metodoPagamento - Il metodo di pagamento
-         * @param {number} importo - L'importo del pagamento
-         * @returns {Promise} - Promise che risolve con i dati del pagamento simulato
-         */
-        async function simulaElaborazionePagamento(metodoPagamento, importo) {
-            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
-
-            const successo = Math.random() > 0.05;
-
-            if (!successo) {
-                const errori = [
-                    'Carta di credito rifiutata',
-                    'Fondi insufficienti',
-                    'Carta scaduta',
-                    'Credenziali PayPal non valide',
-                    'Servizio temporaneamente non disponibile'
-                ];
-                const erroreSimulato = errori[Math.floor(Math.random() * errori.length)];
-                throw new Error(erroreSimulato);
-            }
-
-            let transactionId;
-            const timestamp = Date.now();
-            const random = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-            switch (metodoPagamento) {
-                case 'credit_card':
-                    transactionId = `CC_${timestamp}_${random}`;
-                    break;
-                case 'paypal':
-                    transactionId = `PAYPAL_${timestamp}_${random}`;
-                    break;
-                case 'bank_transfer':
-                    transactionId = `BANK_${timestamp}_${random}`;
-                    break;
-                default:
-                    transactionId = `TXN_${timestamp}_${random}`;
-            }
-
-            return {
-                transactionId: transactionId,
-                status: 'completed',
-                paymentDate: new Date().toISOString(),
-                amount: importo,
-                method: metodoPagamento
-            };
-        }
-
-        /**
-         * Gestisce il processo di pagamento
-         */
-        async function elaboraPagamento() {
-            if (!datiOrdineGlobali || !datiOrdineGrezzi) {
-                mostraAlert('Errore: dati ordine non disponibili per il pagamento.', 'danger');
-                return;
-            }
-
-            const metodoPagamento = $('#payment-method-tabs .nav-link.active').data('payment-method') || 'credit_card';
-            const pulsantePaga = $('#process-payment-btn');
-            const spinner = pulsantePaga.find('.spinner-border');
-
-            if (metodoPagamento !== 'bank_transfer' && !validaDatiPagamento(metodoPagamento)) {
-                const messaggioMetodo = metodoPagamento === 'credit_card' ? 'carta di credito' : 'PayPal';
-                mostraAlert(`Per favore, inserisci tutti i dati richiesti per il pagamento con ${messaggioMetodo}.`, 'warning');
-                return;
-            }
-
-            pulsantePaga.prop('disabled', true);
-            spinner.removeClass('d-none');
-            pulsantePaga.find('.btn-text').text('Elaborazione...');
-
-            try {
-                const importoTotale = parseFloat(datiOrdineGrezzi.total_amount);
-                let resultSimulazione = null;
-
-                if (metodoPagamento !== 'bank_transfer') {
-                    try {
-                        console.log(`Elaborazione pagamento ${metodoPagamento} per importo €${importoTotale}...`);
-                        resultSimulazione = await simulaElaborazionePagamento(metodoPagamento, importoTotale);
-                        console.log('Pagamento simulato completato:', resultSimulazione);
-                    } catch (errorePagamento) {
-                        console.error("Errore pagamento:", errorePagamento);
-                        mostraAlert(`Pagamento non riuscito: ${errorePagamento.message}. Riprova con un altro metodo di pagamento.`, 'danger');
-                        pulsantePaga.prop('disabled', false);
-                        spinner.addClass('d-none');
-                        pulsantePaga.find('.btn-text').text('Completa Pagamento');
-                        return;
-                    }
-                }
-
-                const datiPagamento = {
-                    order_id: datiOrdineGrezzi.order_id,
-                    amount: importoTotale,
-                    payment_method: metodoPagamento,
-                    status: (metodoPagamento === 'bank_transfer') ? 'pending' : 'completed',
-                    payment_date: new Date().toISOString(), ...(resultSimulazione?.transactionId && {transaction_id: resultSimulazione.transactionId})
-                };
-
-                console.log("Invio Payload Pagamento:", JSON.stringify(datiPagamento, null, 2));
-                const rispostaPagamento = await fetch(`${urlBaseApi}/api/payments`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
-                    },
-                    body: JSON.stringify(datiPagamento)
-                });
-
-                if (!rispostaPagamento.ok) {
-                    let messaggioErrore = `Errore ${rispostaPagamento.status}: ${rispostaPagamento.statusText}`;
-                    try {
-                        const datiErrore = await rispostaPagamento.json();
-                        messaggioErrore = `Errore registrazione pagamento: ${datiErrore.message || messaggioErrore}`;
-                    } catch (e) {
-
-                    }
-                    throw new Error(messaggioErrore);
-                }
-                const esitoPagamento = await rispostaPagamento.json();
-                console.log("Risposta Pagamento:", esitoPagamento);
-
-                const messaggioSuccesso = metodoPagamento === 'bank_transfer'
-                    ? `Pagamento registrato! L'ordine #${datiOrdineGrezzi.order_id} verrà elaborato dopo la ricezione del bonifico bancario.`
-                    : `Pagamento completato con successo! L'ordine #${datiOrdineGrezzi.order_id} è stato pagato.`;
-
-                mostraAlert(messaggioSuccesso, 'success');
-
-                setTimeout(() => {
-                    $('#paymentModal').modal('hide');
-                    location.reload();
-                }, 2000);
-
-            } catch (error) {
-                console.error("Errore durante il pagamento:", error);
-                mostraAlert(`Errore durante il pagamento: ${error.message}. Riprova o contatta l'assistenza.`, 'danger');
-            } finally {
-                pulsantePaga.prop('disabled', false);
-                spinner.addClass('d-none');
-                pulsantePaga.find('.btn-text').text('Completa Pagamento');
-            }
         }
 
         /**
@@ -887,20 +307,6 @@
                 console.error("Errore formattazione data:", stringaData, erroreFormattazione);
                 return stringaData;
             }
-        }
-
-        /**
-         * Resetta lo stato dei dati di pagamento quando si carica un nuovo ordine
-         */
-        function resetDatiPagamento() {
-            datiPagamentoCaricati = false;
-            datiPagamentoGlobali = null;
-
-            $('#payment-method').text('N/D');
-            $('#payment-status').text('N/D').removeClass().addClass('text-muted');
-            $('#payment-total').text('€ 0.00');
-
-            $('.payment-transaction-info, .payment-date-info').remove();
         }
     </script>
 </head>
@@ -932,11 +338,10 @@
                 <i class="bi bi-download"></i>
                 <span>Fattura</span>
             </button>
-            <a href="mailto:supporto@artigianato.it"
-               class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
                 <i class="bi bi-headset"></i>
                 <span>Assistenza</span>
-            </a>
+            </button>
         </div>
     </div>
 
@@ -1121,10 +526,13 @@
                     <div class="card-header bg-white border-bottom-0">
                         <h5 class="card-title mb-0 fw-bold">Azioni</h5>
                     </div>
-                    <div class="card-body d-grid gap-2"><a href="mailto:supporto@artigianato.it"
-                                                           class="btn btn-outline-secondary text-start">
-                        <i class="bi bi-headset me-2"></i>Contatta l'assistenza
-                    </a>
+                    <div class="card-body d-grid gap-2">
+                        <button type="button" class="btn btn-outline-secondary text-start">
+                            <i class="bi bi-headset me-2"></i>Contatta l'assistenza
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary text-start py-2" disabled>
+                            <i class="bi bi-box-seam me-2"></i>Richiedi un reso
+                        </button>
                         <button type="button" class="btn btn-outline-secondary text-start py-2" disabled>
                             <i class="bi bi-download me-2"></i>Scarica fattura
                         </button>
@@ -1139,8 +547,7 @@
                     <div class="card-body">
                         <p class="small text-muted">Se hai domande o problemi con il tuo ordine, il nostro team di
                             assistenza è a tua disposizione.</p>
-                        <a href="mailto:supporto@artigianato.it" class="btn btn-dark w-100 mt-2 py-2 pt-1">Contatta
-                            l'assistenza</a>
+                        <button type="button" class="btn btn-dark w-100 mt-2 py-2 pt-1">Contatta l'assistenza</button>
                     </div>
                 </div>
             </div>
@@ -1148,160 +555,53 @@
     </div>
 </div>
 
-<!-- Modale Pagamento -->
-<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header border-bottom-0 pb-0">
-                <h5 class="modal-title" id="paymentModalLabel">
-                    <i class="bi bi-credit-card me-2"></i>Completa il Pagamento
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- Cookie Banner -->
+<div id="cookie-banner" class="cookie-banner">
+    <div class="container d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+        <div class="mb-2 mb-md-0 small">
+            Utilizziamo solo cookie essenziali per il funzionamento del sito. Consulta la nostra
+            <a href="../legal/privacy.html" class="link-dark text-decoration-underline">Privacy Policy</a> e
+            <a href="../legal/tos.html" class="link-dark text-decoration-underline">Termini di Servizio</a>.
+        </div>
+        <div class="d-flex align-items-center">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="essentialCookies" checked disabled>
+                <label class="form-check-label small" for="essentialCookies">Essenziali</label>
             </div>
-            <div class="modal-body">
-                <div id="payment-feedback" class="mb-3"></div>
-
-                <!-- Riepilogo Ordine -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light">
-                        <h6 class="mb-0 fw-bold">Riepilogo Ordine</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>Ordine #<span id="payment-order-id">-</span></span>
-                            <span class="fw-bold" id="payment-order-total">€ 0.00</span>
-                        </div>
-                        <div class="small text-muted">
-                            Effettuato il <span id="payment-order-date">-</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Metodi di Pagamento -->
-                <div class="card">
-                    <div class="card-header bg-white border-bottom-0">
-                        <h6 class="mb-0 fw-bold">Scegli il metodo di pagamento</h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="nav nav-tabs nav-fill mb-3" id="payment-method-tabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link text-dark active" id="payment-card-tab-btn" data-bs-toggle="tab"
-                                        data-bs-target="#payment-card-tab-pane" type="button" role="tab"
-                                        aria-controls="payment-card-tab-pane" aria-selected="true"
-                                        data-payment-method="credit_card">Carta di credito
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link text-dark" id="payment-paypal-tab-btn" data-bs-toggle="tab"
-                                        data-bs-target="#payment-paypal-tab-pane" type="button" role="tab"
-                                        aria-controls="payment-paypal-tab-pane" aria-selected="false"
-                                        data-payment-method="paypal">PayPal
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link text-dark" id="payment-bank-tab-btn" data-bs-toggle="tab"
-                                        data-bs-target="#payment-bank-tab-pane" type="button" role="tab"
-                                        aria-controls="payment-bank-tab-pane" aria-selected="false"
-                                        data-payment-method="bank_transfer">Bonifico
-                                </button>
-                            </li>
-                        </ul>
-
-                        <div class="tab-content" id="payment-method-tabs-content">
-                            <!-- Carta di Credito -->
-                            <div class="tab-pane fade show active" id="payment-card-tab-pane" role="tabpanel"
-                                 aria-labelledby="payment-card-tab-btn" tabindex="0">
-                                <div class="row g-3">
-                                    <div class="col-12">
-                                        <label for="payment-card-number" class="form-label small fw-semibold">Numero
-                                            carta</label>
-                                        <input type="text" class="form-control" id="payment-card-number"
-                                               placeholder="1234 5678 9012 3456" maxlength="19">
-                                        <div class="invalid-feedback">Inserisci un numero di carta valido (16 cifre)
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <label for="payment-card-name" class="form-label small fw-semibold">Nome sulla
-                                            carta</label>
-                                        <input type="text" class="form-control" id="payment-card-name"
-                                               placeholder="Mario Rossi">
-                                        <div class="invalid-feedback">Inserisci il nome come appare sulla carta</div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label for="payment-card-expiry"
-                                               class="form-label small fw-semibold">Scadenza</label>
-                                        <input type="text" class="form-control" id="payment-card-expiry"
-                                               placeholder="MM/AA" maxlength="5">
-                                        <div class="invalid-feedback">Formato: MM/AA</div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label for="payment-card-cvv" class="form-label small fw-semibold">CVV</label>
-                                        <input type="text" class="form-control" id="payment-card-cvv"
-                                               placeholder="123" maxlength="4">
-                                        <div class="invalid-feedback">3-4 cifre sul retro della carta</div>
-                                    </div>
-                                </div>
-                                <div class="mt-3 small text-muted">
-                                    <i class="bi bi-shield-lock me-1"></i>
-                                    Pagamenti Sicuri - I dati non verranno memorizzati
-                                </div>
-                            </div>
-
-                            <!-- PayPal -->
-                            <div class="tab-pane fade" id="payment-paypal-tab-pane" role="tabpanel"
-                                 aria-labelledby="payment-paypal-tab-btn" tabindex="0">
-                                <div class="text-center mb-3">
-                                    <i class="bi bi-paypal text-primary fs-2"></i>
-                                </div>
-                                <div class="row g-3">
-                                    <div class="col-12">
-                                        <label for="payment-paypal-email" class="form-label small fw-semibold">Email
-                                            PayPal</label>
-                                        <input type="email" class="form-control" id="payment-paypal-email"
-                                               placeholder="la-tua-email@esempio.com">
-                                        <div class="invalid-feedback">Inserisci un indirizzo email valido</div>
-                                    </div>
-                                </div>
-                                <div class="mt-3 small text-muted">
-                                    <i class="bi bi-shield-lock me-1"></i>
-                                    Accesso simulato - Nessuna credenziale reale verrà verificata
-                                </div>
-                            </div>
-
-                            <!-- Bonifico Bancario -->
-                            <div class="tab-pane fade" id="payment-bank-tab-pane" role="tabpanel"
-                                 aria-labelledby="payment-bank-tab-btn" tabindex="0">
-                                <div class="p-3 bg-light rounded border">
-                                    <p class="fw-medium mb-1 small">Dettagli bancari:</p>
-                                    <div class="small">
-                                        <p class="small mb-0">Intestatario: Artigianato Online S.r.l.</p>
-                                        <p class="small mb-0">IBAN: ITXXXXXXXXXXXXXXXXXXXXXXXXX</p>
-                                        <p class="small mb-0">Banca: La Banca</p>
-                                        <p class="small mt-2">Causale: Ordine <strong id="payment-bank-order-ref">[Numero
-                                            Ordine]</strong> - <span
-                                                id="payment-bank-customer-name">[Nome Cognome]</span></p>
-                                    </div>
-                                </div>
-                                <p class="small text-muted mt-2">
-                                    Il tuo ordine verrà elaborato dopo la ricezione del pagamento.
-                                    Riceverai i dettagli completi anche via email.
-                                    Includi il riferimento ordine e nome/cognome nella causale.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="form-check form-check-inline ms-2">
+                <input class="form-check-input" type="checkbox" id="analyticsCookies" disabled>
+                <label class="form-check-label small" for="analyticsCookies">Analitici</label>
             </div>
-            <div class="modal-footer border-top-0 pt-0">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-warning" id="process-payment-btn" onclick="elaboraPagamento()">
-                    <span class="spinner-border spinner-border-sm d-none me-2" role="status" aria-hidden="true"></span>
-                    <span class="btn-text">Completa Pagamento</span>
-                </button>
+            <div class="form-check form-check-inline ms-2">
+                <input class="form-check-input" type="checkbox" id="marketingCookies" disabled>
+                <label class="form-check-label small" for="marketingCookies">Marketing</label>
             </div>
+            <button id="rejectCookies" class="btn btn-secondary btn-sm ms-3">Rifiuta</button>
+            <button id="acceptCookies" class="btn btn-dark btn-sm ms-2">Accetta</button>
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const banner = document.getElementById('cookie-banner');
+        if (!localStorage.getItem('cookieConsent')) {
+            setTimeout(() => banner.classList.add('show'), 50);
+        }
+
+        document.getElementById('acceptCookies').addEventListener('click', () => {
+            localStorage.setItem('cookieConsent', 'true');
+            banner.classList.remove('show');
+            setTimeout(() => banner.style.display = 'none', 400);
+        });
+
+        document.getElementById('rejectCookies').addEventListener('click', () => {
+            localStorage.setItem('cookieConsent', 'false');
+            banner.classList.remove('show');
+            setTimeout(() => banner.style.display = 'none', 400);
+        });
+    });
+</script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
