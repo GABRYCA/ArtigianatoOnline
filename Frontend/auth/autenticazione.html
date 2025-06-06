@@ -31,6 +31,24 @@
                 return;
             }
 
+            //Gestione parametri URL per attivare il tab corretto (login e register)
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabParam = urlParams.get('tab');
+
+            if (tabParam) {
+                if (tabParam === 'login') {
+                    // Attiva il tab di login
+                    $('#accedi-tab').tab('show');
+                } else if (tabParam === 'register') {
+                    // Attiva il tab di registrazione
+                    $('#registrati-tab').tab('show');
+                }
+
+                // Rimuovi il parametro dall'URL senza ricaricare la pagina
+                const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                window.history.replaceState({path: newUrl}, '', newUrl);
+            }
+
             /**
              * Mostra un messaggio di alert nell'interfaccia
              * @param {string} messaggio - Il messaggio da mostrare
