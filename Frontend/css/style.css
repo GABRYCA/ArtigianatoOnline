@@ -133,6 +133,7 @@ input:focus, textarea:focus, select:focus {
     font-weight: 500;
 }
 
+
 /* cookie */
 .cookie-banner {
     position: fixed; bottom: 0; left: 0; right: 0;
