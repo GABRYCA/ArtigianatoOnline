@@ -40,7 +40,6 @@
             caricaProdotti(1, {artisanId: idArtigiano});
             inizializzaInterfacciaFiltri();
             inizializzaGestoriEventi();
-            inizializzaOsservatoreImmagini();
         });
 
         /**
@@ -99,35 +98,6 @@
 
             if (window.innerWidth >= 992) {
                 $("#filterSection").addClass("d-lg-block");
-            }
-        }
-
-        /**
-         * Inizializza l'osservatore globale per le immagini
-         */
-        function inizializzaOsservatoreImmagini() {
-            if ('IntersectionObserver' in window) {
-                window.immaginiOsservatore = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            const img = entry.target;
-
-                            if (img.dataset.src && !img.src.includes(img.dataset.src)) {
-                                img.src = img.dataset.src;
-                                img.removeAttribute('data-src');
-                            }
-
-                            img.addEventListener('load', () => {
-                                img.style.opacity = '1';
-                            }, {once: true});
-
-                            window.immaginiOsservatore.unobserve(img);
-                        }
-                    });
-                }, {
-                    rootMargin: '50px 0px',
-                    threshold: 0.1
-                });
             }
         }
 
@@ -369,12 +339,7 @@
                             $("#prodotti").append(htmlProdotto);
                         });
                     }
-
                     gestisciPulsanteCaricaAltri();
-
-                    setTimeout(() => {
-                        osservaImmaginiLazyLoad();
-                    }, 100);
                 },
                 error: function (xhr, status, errore) {
                     console.error("Errore durante il caricamento dei prodotti:", errore);
@@ -404,8 +369,7 @@
                               <img src="${ottimizzaUrlUnsplash(prodotto.image_url)}" 
                                    class="card-img-top object-fit-cover" 
                                    alt="${prodotto.name}"
-                                   loading="lazy"
-                                   style="transition: opacity 0.3s ease;">
+                                   loading="lazy">
                           </div>
                        </a>
                         <div class="card-body pt-4 d-flex flex-column">
@@ -422,18 +386,6 @@
                      </div>
                 </div>
              `;
-        }
-
-        /**
-         * Osserva le immagini per il lazy loading migliorato
-         */
-        function osservaImmaginiLazyLoad() {
-            if (window.immaginiOsservatore) {
-                document.querySelectorAll('img[loading="lazy"]:not([data-observed])').forEach(img => {
-                    img.setAttribute('data-observed', 'true');
-                    window.immaginiOsservatore.observe(img);
-                });
-            }
         }
 
         /**
