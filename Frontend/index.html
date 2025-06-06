@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Artigianato Online - Esame pratico di Tecnologie Innovative per lo Sviluppo Web di G.C. e R.C.">
+    <meta name="description"
+          content="Artigianato Online - Esame pratico di Tecnologie Innovative per lo Sviluppo Web di G.C. e R.C.">
+
+    <link rel="preconnect" href="https://images.unsplash.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://images.unsplash.com">
 
     <title>Artigianato Online</title>
 
@@ -29,13 +34,13 @@
         let numeroPaginaCorrente = 1;
         let numeroPagineTotali = 1;
         let filtriApplicati = {};
-
         $(document).ready(function () {
 
             caricaCategorie();
             caricaProdotti(1, {artisanId: idArtigiano});
             inizializzaInterfacciaFiltri();
             inizializzaGestoriEventi();
+            inizializzaOsservatoreImmagini();
         });
 
         /**
@@ -94,6 +99,35 @@
 
             if (window.innerWidth >= 992) {
                 $("#filterSection").addClass("d-lg-block");
+            }
+        }
+
+        /**
+         * Inizializza l'osservatore globale per le immagini
+         */
+        function inizializzaOsservatoreImmagini() {
+            if ('IntersectionObserver' in window) {
+                window.immaginiOsservatore = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const img = entry.target;
+
+                            if (img.dataset.src && !img.src.includes(img.dataset.src)) {
+                                img.src = img.dataset.src;
+                                img.removeAttribute('data-src');
+                            }
+
+                            img.addEventListener('load', () => {
+                                img.style.opacity = '1';
+                            }, {once: true});
+
+                            window.immaginiOsservatore.unobserve(img);
+                        }
+                    });
+                }, {
+                    rootMargin: '50px 0px',
+                    threshold: 0.1
+                });
             }
         }
 
@@ -271,14 +305,45 @@
         }
 
         /**
+         * Crea scheletri di caricamento per i prodotti
+         * @param {number} numeroScheletri
+         * @returns {string}
+         */
+        function creaScheletriCaricamento(numeroScheletri = 6) {
+            let htmlScheletri = '';
+            for (let i = 0; i < numeroScheletri; i++) {
+                htmlScheletri += `
+                    <div class="col-12 col-lg-4 mb-3">
+                        <div class="card h-100 shadow-sm">
+                            <div class="ratio ratio-4x3 bg-light placeholder-glow">
+                                <div class="placeholder w-100 h-100"></div>
+                            </div>
+                            <div class="card-body pt-4 d-flex flex-column">
+                                <div class="placeholder-glow">
+                                    <h5 class="placeholder col-8"></h5>
+                                    <p class="placeholder col-12"></p>
+                                    <p class="placeholder col-6"></p>
+                                    <p class="placeholder col-4"></p>
+                                </div>
+                                <div class="placeholder-glow mt-auto">
+                                    <button class="btn btn-dark w-100 placeholder" disabled></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            return htmlScheletri;
+        }
+
+        /**
          * Carica i prodotti dal backend con paginazione e filtri
          * @param {number} numeroPagina - Numero della pagina da caricare
          * @param {Object} filtri - Oggetto contenente i filtri da applicare
-         */
-        function caricaProdotti(numeroPagina = 1, filtri = {}) {
+         */        function caricaProdotti(numeroPagina = 1, filtri = {}) {
             if (numeroPagina === 1) {
                 $("#prodotti").empty();
-                $("#prodotti").append('<div class="col-12 text-center my-5"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>');
+                $("#prodotti").append(creaScheletriCaricamento(6));
             }
 
             let urlCompleto = costruisciUrlApi(numeroPagina, filtri);
@@ -306,6 +371,10 @@
                     }
 
                     gestisciPulsanteCaricaAltri();
+
+                    setTimeout(() => {
+                        osservaImmaginiLazyLoad();
+                    }, 100);
                 },
                 error: function (xhr, status, errore) {
                     console.error("Errore durante il caricamento dei prodotti:", errore);
@@ -331,7 +400,13 @@
                 <div class="col-12 col-lg-4 mb-3">
                    <div class="card h-100 shadow-sm">
                        <a href="prodotto.html?id=${prodotto.product_id}" class="text-decoration-none text-dark">
-                          <img src="${ottimizzaUrlUnsplash(prodotto.image_url)}" class="card-img-top" alt="${prodotto.name}">
+                          <div class="ratio ratio-4x3 bg-light">
+                              <img src="${ottimizzaUrlUnsplash(prodotto.image_url)}" 
+                                   class="card-img-top object-fit-cover" 
+                                   alt="${prodotto.name}"
+                                   loading="lazy"
+                                   style="transition: opacity 0.3s ease;">
+                          </div>
                        </a>
                         <div class="card-body pt-4 d-flex flex-column">
                             <a href="prodotto.html?id=${prodotto.product_id}" class="text-decoration-none text-dark">
@@ -350,7 +425,22 @@
         }
 
         /**
+         * Osserva le immagini per il lazy loading migliorato
+         */
+        function osservaImmaginiLazyLoad() {
+            if (window.immaginiOsservatore) {
+                document.querySelectorAll('img[loading="lazy"]:not([data-observed])').forEach(img => {
+                    img.setAttribute('data-observed', 'true');
+                    window.immaginiOsservatore.observe(img);
+                });
+            }
+        }
+
+        /**
          * Ritorna URL unsplash ottimizzato
+         *
+         * @param url
+         * @returns {*|string}
          */
         function ottimizzaUrlUnsplash(url) {
             if (!url.includes("unsplash.com")) return url;
