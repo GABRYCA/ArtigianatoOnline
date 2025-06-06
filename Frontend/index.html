@@ -393,6 +393,29 @@
 
             return urlCompleto;
         }
+
+        /**
+         * Sezione cookie
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            const banner = document.getElementById('cookie-banner');
+            if (!localStorage.getItem('cookieConsent')) {
+                setTimeout(() => banner.classList.add('show'), 50);
+            }
+
+            document.getElementById('acceptCookies').addEventListener('click', () => {
+                localStorage.setItem('cookieConsent', 'true');
+                banner.classList.remove('show');
+                setTimeout(() => banner.style.display = 'none', 400);
+            });
+
+            document.getElementById('rejectCookies').addEventListener('click', () => {
+                localStorage.setItem('cookieConsent', 'false');
+                banner.classList.remove('show');
+                setTimeout(() => banner.style.display = 'none', 400);
+            });
+        });
+
     </script>
 </head>
 <body style="padding-top: 55px;">
@@ -605,27 +628,6 @@
         </div>
     </div>
 </div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const banner = document.getElementById('cookie-banner');
-        if (!localStorage.getItem('cookieConsent')) {
-            setTimeout(() => banner.classList.add('show'), 50);
-        }
-
-        document.getElementById('acceptCookies').addEventListener('click', () => {
-            localStorage.setItem('cookieConsent', 'true');
-            banner.classList.remove('show');
-            setTimeout(() => banner.style.display = 'none', 400);
-        });
-
-        document.getElementById('rejectCookies').addEventListener('click', () => {
-            localStorage.setItem('cookieConsent', 'false');
-            banner.classList.remove('show');
-            setTimeout(() => banner.style.display = 'none', 400);
-        });
-    });
-</script>
 
 <!-- Bootstra e Footer - definito in common/footer.html -->
 <div id="footer-placeholder"></div>

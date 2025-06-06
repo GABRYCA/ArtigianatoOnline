@@ -309,6 +309,29 @@
                 clearInterval(intervalloAggiornamento);
             }
         });
+
+        /**
+         * Sezione cookie
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            const banner = document.getElementById('cookie-banner');
+            if (!localStorage.getItem('cookieConsent')) {
+                setTimeout(() => banner.classList.add('show'), 50);
+            }
+
+            document.getElementById('acceptCookies').addEventListener('click', () => {
+                localStorage.setItem('cookieConsent', 'true');
+                banner.classList.remove('show');
+                setTimeout(() => banner.style.display = 'none', 400);
+            });
+
+            document.getElementById('rejectCookies').addEventListener('click', () => {
+                localStorage.setItem('cookieConsent', 'false');
+                banner.classList.remove('show');
+                setTimeout(() => banner.style.display = 'none', 400);
+            });
+        });
+
     </script>
 </head>
 <body class="bg-white">
@@ -480,27 +503,6 @@
         </div>
     </div>
 </div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const banner = document.getElementById('cookie-banner');
-        if (!localStorage.getItem('cookieConsent')) {
-            setTimeout(() => banner.classList.add('show'), 50);
-        }
-
-        document.getElementById('acceptCookies').addEventListener('click', () => {
-            localStorage.setItem('cookieConsent', 'true');
-            banner.classList.remove('show');
-            setTimeout(() => banner.style.display = 'none', 400);
-        });
-
-        document.getElementById('rejectCookies').addEventListener('click', () => {
-            localStorage.setItem('cookieConsent', 'false');
-            banner.classList.remove('show');
-            setTimeout(() => banner.style.display = 'none', 400);
-        });
-    });
-</script>
 
 <div id="footer-placeholder"></div>
 

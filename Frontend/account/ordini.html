@@ -308,6 +308,29 @@
                 return stringaData;
             }
         }
+
+        /**
+         * Sezione cookie
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            const banner = document.getElementById('cookie-banner');
+            if (!localStorage.getItem('cookieConsent')) {
+                setTimeout(() => banner.classList.add('show'), 50);
+            }
+
+            document.getElementById('acceptCookies').addEventListener('click', () => {
+                localStorage.setItem('cookieConsent', 'true');
+                banner.classList.remove('show');
+                setTimeout(() => banner.style.display = 'none', 400);
+            });
+
+            document.getElementById('rejectCookies').addEventListener('click', () => {
+                localStorage.setItem('cookieConsent', 'false');
+                banner.classList.remove('show');
+                setTimeout(() => banner.style.display = 'none', 400);
+            });
+        });
+
     </script>
 </head>
 <body>
@@ -582,26 +605,6 @@
     </div>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const banner = document.getElementById('cookie-banner');
-        if (!localStorage.getItem('cookieConsent')) {
-            setTimeout(() => banner.classList.add('show'), 50);
-        }
-
-        document.getElementById('acceptCookies').addEventListener('click', () => {
-            localStorage.setItem('cookieConsent', 'true');
-            banner.classList.remove('show');
-            setTimeout(() => banner.style.display = 'none', 400);
-        });
-
-        document.getElementById('rejectCookies').addEventListener('click', () => {
-            localStorage.setItem('cookieConsent', 'false');
-            banner.classList.remove('show');
-            setTimeout(() => banner.style.display = 'none', 400);
-        });
-    });
-</script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
