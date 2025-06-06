@@ -175,8 +175,12 @@
                         mostraAlert(`Registrazione avvenuta con successo per ${response.user.email}. Puoi ora effettuare l'accesso.`, 'success', 'register-feedback');
                         $('#registerForm')[0].reset();
                         pulsanteRegistrazione.prop('disabled', false).html(testoOriginale);
-                        $('#accedi-tab').tab('show');
-                        $('#emailAccedi').val(email);
+
+                        // Delay di 3 secondi prima di passare al tab di login
+                        setTimeout(function() {
+                            $('#accedi-tab').tab('show');
+                            $('#emailAccedi').val(email);
+                        }, 3000);
                     },
                     error: function (xhr, status, error) {
                         console.error("Registration error:", xhr.responseText);
