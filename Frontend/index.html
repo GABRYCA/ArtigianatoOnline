@@ -331,7 +331,7 @@
                 <div class="col-12 col-lg-4 mb-3">
                    <div class="card h-100 shadow-sm">
                        <a href="prodotto.html?id=${prodotto.product_id}" class="text-decoration-none text-dark">
-                          <img src="${prodotto.image_url}" class="card-img-top" alt="${prodotto.name}">
+                          <img src="${ottimizzaUrlUnsplash(prodotto.image_url)}" class="card-img-top" alt="${prodotto.name}">
                        </a>
                         <div class="card-body pt-4 d-flex flex-column">
                             <a href="prodotto.html?id=${prodotto.product_id}" class="text-decoration-none text-dark">
@@ -347,6 +347,19 @@
                      </div>
                 </div>
              `;
+        }
+
+        /**
+         * Ritorna URL unsplash ottimizzato
+         */
+        function ottimizzaUrlUnsplash(url) {
+            if (!url.includes("unsplash.com")) return url;
+
+            if (url.includes('?')) {
+                return `${url}&q=80&w=800&auto=format&fit=max`;
+            } else {
+                return `${url}?q=80&w=800&auto=format&fit=max`;
+            }
         }
 
         /**
