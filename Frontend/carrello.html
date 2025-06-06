@@ -140,7 +140,7 @@
          * @param {number} subtotale - Il subtotale degli articoli
          */
         function aggiornaSommario(subtotale) {
-            const costoSpedizione = 0;
+            const costoSpedizione = subtotale >= 100 ? 0 : 4.99;
             const totale = subtotale + costoSpedizione;
 
             $('#subtotal').text(`€ ${subtotale.toFixed(2)}`);
