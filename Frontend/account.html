@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Artigianato Online - Esame pratico di Tecnologie Innovative per lo Sviluppo Web di G.C. e R.C.">
+    <meta name="description"
+          content="Artigianato Online - Esame pratico di Tecnologie Innovative per lo Sviluppo Web di G.C. e R.C.">
 
     <title>Account - Artigianato Online</title>
 
@@ -65,10 +66,16 @@
             const spinnerSalvaIndirizzo = pulsanteSalvaIndirizzo.find('.spinner-border');
             const feedbackModaleIndirizzo = $('#address-modal-feedback');
             const textareaIndirizzo = $('#address-text');
-
             const modaleModificaProfilo = document.getElementById('editProfileModal');
             const feedbackModaleModificaProfilo = $('#edit-profile-modal-feedback');
             const inputNomeModificaProfilo = $('#edit-profile-name');
+
+            const modaleCambioPassword = document.getElementById('changePasswordModal');
+            const feedbackModaleCambioPassword = $('#change-password-modal-feedback');
+            const formCambioPassword = $('#changePasswordForm');
+            const pulsanteSalvaPassword = $('#save-password-button');
+            const spinnerSalvaPassword = pulsanteSalvaPassword.find('.spinner-border');
+
             elementoModaleIndirizzo.addEventListener('show.bs.modal', event => {
                 feedbackModaleIndirizzo.empty().removeClass('alert alert-danger alert-success alert-warning');
                 formIndirizzo[0].reset();
@@ -89,11 +96,18 @@
                     $('#addressModalLabel').text('Aggiungi Indirizzo di Spedizione');
                 }
             });
-
             modaleModificaProfilo.addEventListener('show.bs.modal', event => {
                 feedbackModaleModificaProfilo.empty().removeClass('alert alert-danger alert-success alert-warning');
                 inputNomeModificaProfilo.val(datiUtente.full_name || '');
             });
+
+            modaleCambioPassword.addEventListener('show.bs.modal', event => {
+                feedbackModaleCambioPassword.empty().removeClass('alert alert-danger alert-success alert-warning');
+                formCambioPassword[0].reset();
+                pulsanteSalvaPassword.prop('disabled', false);
+                spinnerSalvaPassword.hide();
+            });
+
             formIndirizzo.on('submit', function (e) {
                 e.preventDefault();
                 const valoreIndirizzo = textareaIndirizzo.val().trim();
@@ -141,10 +155,79 @@
                     .catch(error => {
                         console.error("Errore durante il salvataggio dell'indirizzo:", error);
                         feedbackModaleIndirizzo.addClass('alert alert-danger').text(`Errore durante il salvataggio: ${error.message || 'Riprova più tardi.'}`);
+                    }).finally(() => {
+                    pulsanteSalvaIndirizzo.prop('disabled', false);
+                    spinnerSalvaIndirizzo.hide();
+                });
+            });
+
+            formCambioPassword.on('submit', function (e) {
+                e.preventDefault();
+                const passwordAttuale = $('#current-password').val().trim();
+                const nuovaPassword = $('#new-password').val().trim();
+                const confermaNuovaPassword = $('#confirm-new-password').val().trim();
+
+                feedbackModaleCambioPassword.empty().removeClass('alert alert-danger alert-success alert-warning');
+
+                if (!passwordAttuale) {
+                    feedbackModaleCambioPassword.addClass('alert alert-warning').text('Per favore, inserisci la password attuale.');
+                    return;
+                }
+
+                if (!nuovaPassword || nuovaPassword.length < 8) {
+                    feedbackModaleCambioPassword.addClass('alert alert-warning').text('La nuova password deve essere di almeno 8 caratteri.');
+                    return;
+                }
+
+                if (nuovaPassword !== confermaNuovaPassword) {
+                    feedbackModaleCambioPassword.addClass('alert alert-warning').text('Le password non corrispondono.');
+                    return;
+                }
+
+                if (!datiUtente || !datiUtente.user_id) {
+                    feedbackModaleCambioPassword.addClass('alert alert-danger').text('Errore: Dati utente non trovati.');
+                    return;
+                }
+
+                pulsanteSalvaPassword.prop('disabled', true);
+                spinnerSalvaPassword.show();
+
+                const datiCambioPassword = {
+                    password_attuale: passwordAttuale,
+                    nuova_password: nuovaPassword
+                };
+
+                eseguiFetchAutenticato(`${urlBaseApi}/api/users/${datiUtente.user_id}/changepassword`, {
+                    method: 'PUT',
+                    body: JSON.stringify(datiCambioPassword)
+                })
+                    .then(risposta => {
+                        feedbackModaleCambioPassword.addClass('alert alert-success').text('Password cambiata con successo!');
+
+                        setTimeout(() => {
+                            const modalePassword = bootstrap.Modal.getInstance(modaleCambioPassword);
+                            modalePassword.hide();
+                        }, 1500);
+                    })
+                    .catch(error => {
+                        console.error("Errore durante il cambio password:", error);
+                        let messaggioErrore = 'Errore durante il cambio password. Riprova più tardi.';
+
+                        if (error.message.includes('password attuale errata') || error.message.includes('401')) {
+                            messaggioErrore = 'Password attuale non corretta.';
+                        } else if (error.message.includes('password troppo corta') || error.message.includes('400')) {
+                            messaggioErrore = 'La nuova password deve essere di almeno 8 caratteri.';
+                        } else if (error.message.includes('403')) {
+                            messaggioErrore = 'Non sei autorizzato a cambiare questa password.';
+                        } else if (error.message.includes('404')) {
+                            messaggioErrore = 'Utente non trovato.';
+                        }
+
+                        feedbackModaleCambioPassword.addClass('alert alert-danger').text(messaggioErrore);
                     })
                     .finally(() => {
-                        pulsanteSalvaIndirizzo.prop('disabled', false);
-                        spinnerSalvaIndirizzo.hide();
+                        pulsanteSalvaPassword.prop('disabled', false);
+                        spinnerSalvaPassword.hide();
                     });
             });
         });
@@ -749,12 +832,12 @@
                                             aria-controls="profilo-tab-pane" aria-selected="true">Profilo
                                     </button>
                                 </li>
-                                <!--<li class="nav-item" role="presentation">
+                                <li class="nav-item" role="presentation">
                                     <button class="nav-link text-dark" id="password-tab" data-bs-toggle="tab"
                                             data-bs-target="#password-tab-pane" type="button" role="tab"
                                             aria-controls="password-tab-pane" aria-selected="false">Password
                                     </button>
-                                </li>-->
+                                </li>
                             </ul>
                             <div class="tab-content" id="accountSettingsTabContent">
                                 <div class="tab-pane fade show active" id="profilo-tab-pane" role="tabpanel"
@@ -764,13 +847,15 @@
                                     </p>
                                     <button id="edit-profile-button" class="btn btn-dark">Modifica profilo</button>
                                 </div>
-                                <!--<div class="tab-pane fade" id="password-tab-pane" role="tabpanel"
+                                <div class="tab-pane fade" id="password-tab-pane" role="tabpanel"
                                      aria-labelledby="password-tab" tabindex="0">
                                     <p class="text-muted mb-3">
                                         Cambia password per mantenere sicuro il tuo account.
                                     </p>
-                                    <button id="change-password-button" class="btn btn-dark">Cambia password</button>
-                                </div>-->
+                                    <button id="change-password-button" class="btn btn-dark" data-bs-toggle="modal"
+                                            data-bs-target="#changePasswordModal">Cambia password
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -854,6 +939,57 @@ Italia">
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale cambio password -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="changePasswordForm">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="changePasswordModalLabel">Cambia Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="change-password-modal-feedback" class="mb-3"></div>
+                    <div class="mb-3">
+                        <label for="current-password" class="form-label">Password Attuale</label>
+                        <input type="password" class="form-control" id="current-password" required
+                               placeholder="Inserisci la password attuale">
+                        <div class="form-text">Inserisci la tua password attuale per confermare l'identità.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="new-password" class="form-label">Nuova Password</label>
+                        <input type="password" class="form-control" id="new-password" required
+                               placeholder="Inserisci la nuova password" minlength="8">
+                        <div class="form-text">La password deve essere di almeno 8 caratteri.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm-new-password" class="form-label">Conferma Nuova Password</label>
+                        <input type="password" class="form-control" id="confirm-new-password" required
+                               placeholder="Conferma la nuova password" minlength="8">
+                        <div class="form-text">Ripeti la nuova password per confermare.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <div class="row justify-content-between w-100 g-1">
+                        <div class="col-6 ps-0">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6 pe-0">
+                            <button type="submit" class="btn btn-dark w-100" id="save-password-button">
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"
+                                      style="display: none;"></span>
+                                Cambia Password
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>
