@@ -133,6 +133,29 @@ input:focus, textarea:focus, select:focus {
     font-weight: 500;
 }
 
+/* cookie */
+.cookie-banner {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    padding: 1rem;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+    z-index: 2000;
+    opacity: 0; transform: translateY(100%); visibility: hidden;
+    transition: all 0.4s ease-in-out;
+}
+.cookie-banner.show {
+    opacity: 1; transform: translateY(0); visibility: visible;
+}
+.cookie-banner .btn {
+    min-width: 96px;
+}
+.cookie-banner .form-check-input:disabled {
+    cursor: not-allowed;
+    background-color: #e9ecef;
+    border-color: #ced4da;
+}
+
 /* mobile */
 @media (max-width: 768px) {
     .text-description-hero {
