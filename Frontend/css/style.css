@@ -159,6 +159,29 @@ input:focus, textarea:focus, select:focus {
 
 /* mobile */
 @media (max-width: 768px) {
+
+    .cookie-banner .d-flex.align-items-center {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .cookie-banner .form-check {
+        margin-bottom: 0.25rem;
+    }
+
+    .cookie-banner .btn {
+        width: 50%;
+        margin-left: 0 !important;
+    }
+
+    .cookie-banner #acceptCookies,
+    .cookie-banner #rejectCookies {
+        margin-top: 0.25rem;
+    }
+
+
     .text-description-hero {
         max-width: 100%;
         font-size: 1rem;
