@@ -122,7 +122,7 @@
                     $('#bank-customer-name').text(datiUtente.full_name || '[Nome Cognome]');
                 } else {
                     $('#bank-customer-name').text('[Nome Cognome]');
-                    // MODIFICATO: Aggiunti parametri URL per specificare quale tab aprire
+                    //Aggiunti parametri URL per specificare quale tab aprire
                     mostraAlert('Sembra che tu non sia loggato. Per procedere, <a href="auth/autenticazione.html?tab=login">accedi</a> o <a href="auth/autenticazione.html?tab=register">registrati</a>.', 'info');
                     disabilitaCampiForm(true);
                     pulsanteCompletaOrdine.prop('disabled', true).text('Accedi per continuare');
