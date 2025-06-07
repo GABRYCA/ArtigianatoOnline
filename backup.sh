@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_NAME="artigianato"
+PROJECT_NAME=$(basename "$(pwd)")
 BACKUPS_ROOT_DIR="$(pwd)/backups"
 
 BACKUP_DIR="${BACKUPS_ROOT_DIR}/$(date +%F_%H-%M-%S)"
@@ -24,7 +24,7 @@ mkdir -p "$BACKUP_DIR"
 
 # BACKUP DEL DATABASE POSTGRESQL
 echo ">>> [1/5] Backup del database '${DB_NAME}' in corso (dump SQL)..."
-docker-compose exec -T db pg_dump -U "${DB_USER}" -d "${DB_NAME}" | gzip > "${BACKUP_DIR}/db_backup.sql.gz"
+docker compose exec -T db pg_dump -U "${DB_USER}" -d "${DB_NAME}" | gzip > "${BACKUP_DIR}/db_backup.sql.gz"
 
 # BACKUP VOLUMI DI NGINX PROXY MANAGER
 echo ">>> [2/5] Backup del volume dati di Nginx Proxy Manager..."
@@ -46,8 +46,8 @@ tar czf "${BACKUP_DIR}/postgres-init.tar.gz" -C . ./postgres-init
 
 # BACKUP IMMAGINI DOCKER
 echo ">>> [5/5] Backup delle immagini Docker personalizzate..."
-docker save -o "${BACKUP_DIR}/backend_image.tar" "${PROJECT_NAME}_backend:latest"
-docker save -o "${BACKUP_DIR}/frontend_image.tar" "${PROJECT_NAME}_frontend:latest"
+docker save -o "${BACKUP_DIR}/backend_image.tar" "${PROJECT_NAME}-backend:latest"
+docker save -o "${BACKUP_DIR}/frontend_image.tar" "${PROJECT_NAME}-frontend:latest"
 
 echo ""
 echo "=========================================="
