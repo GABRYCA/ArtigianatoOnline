@@ -24,17 +24,17 @@ mkdir -p "$BACKUP_DIR"
 
 # BACKUP DEL DATABASE POSTGRESQL
 echo ">>> [1/5] Backup del database '${DB_NAME}' in corso (dump SQL)..."
-docker compose exec -T db pg_dump -U "${DB_USER}" -d "${DB_NAME}" | gzip > "${BACKUP_DIR}/db_backup.sql.gz"
+sudo docker compose exec -T db pg_dump -U "${DB_USER}" -d "${DB_NAME}" | gzip > "${BACKUP_DIR}/db_backup.sql.gz"
 
 # BACKUP VOLUMI DI NGINX PROXY MANAGER
 echo ">>> [2/5] Backup del volume dati di Nginx Proxy Manager..."
-docker run --rm \
+sudo docker run --rm \
   -v "${PROJECT_NAME}_npm-data:/data" \
   -v "${BACKUP_DIR}:/backup" \
   alpine tar czf "/backup/npm_data.tar.gz" -C /data .
 
 echo ">>> [3/5] Backup del volume certificati di Nginx Proxy Manager (Let's Encrypt)..."
-docker run --rm \
+sudo docker run --rm \
   -v "${PROJECT_NAME}_npm-letsencrypt:/etc/letsencrypt" \
   -v "${BACKUP_DIR}:/backup" \
   alpine tar czf "/backup/npm_letsencrypt.tar.gz" -C /etc/letsencrypt .
@@ -46,8 +46,8 @@ tar czf "${BACKUP_DIR}/postgres-init.tar.gz" -C . ./postgres-init
 
 # BACKUP IMMAGINI DOCKER
 echo ">>> [5/5] Backup delle immagini Docker personalizzate..."
-docker save -o "${BACKUP_DIR}/backend_image.tar" "${PROJECT_NAME}-backend:latest"
-docker save -o "${BACKUP_DIR}/frontend_image.tar" "${PROJECT_NAME}-frontend:latest"
+sudo docker save -o "${BACKUP_DIR}/backend_image.tar" "${PROJECT_NAME}-backend"
+sudo docker save -o "${BACKUP_DIR}/frontend_image.tar" "${PROJECT_NAME}-frontend"
 
 echo ""
 echo "=========================================="
