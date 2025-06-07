@@ -10,7 +10,7 @@ BACKUPS_ROOT_DIR="$(pwd)/backups"
 BACKUP_DIR="${BACKUPS_ROOT_DIR}/$(date +%F_%H-%M-%S)"
 
 
-# Controlla se il file .env esiste, è fondamentale per le credenziali del DB
+# Controlla se il file .env esiste (verrà usato per estrarre le credenziali del database)
 if [ ! -f .env ]; then
     echo "! ERRORE: File .env non trovato. Impossibile procedere con il backup del database."
     echo "Copia .env.example in .env e configuralo prima di eseguire lo script."
