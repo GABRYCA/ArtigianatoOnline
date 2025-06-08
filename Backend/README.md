@@ -149,34 +149,34 @@ Il sistema utilizza diversi middleware per garantire sicurezza e funzionalità:
 Il sistema supporta tre ruoli principali:
 
 1. **Cliente (`cliente`)**
-  - Navigazione e ricerca prodotti
-  - Creazione e gestione ordini
-  - Visualizzazione storico acquisti
-  - Gestione profilo personale
+- Navigazione e ricerca prodotti
+- Creazione e gestione ordini
+- Visualizzazione storico acquisti
+- Gestione profilo personale
 
 2. **Artigiano (`artigiano`)**
-  - Gestione catalogo prodotti (CRUD)
-  - Creazione e rinomina categorie
-  - Visualizzazione ordini ricevuti
-  - Aggiornamento stato ordini
-  - Gestione profilo e shop
+- Gestione catalogo prodotti (CRUD)
+- Creazione e rinomina categorie
+- Visualizzazione ordini ricevuti
+- Aggiornamento stato ordini
+- Gestione profilo e shop
 
 3. **Admin (`admin`)**
-  - Accesso completo a tutte le funzionalità
-  - Gestione utenti e ruoli
-  - Gestione categorie
-  - Supervisione ordini e pagamenti
+- Accesso completo a tutte le funzionalità
+- Gestione utenti e ruoli
+- Gestione categorie
+- Supervisione ordini e pagamenti
 
 ### Flusso di Autenticazione
 1. **Registrazione**: `POST /api/auth/register`
-  - Validazione dati utente
-  - Hash password con bcrypt
-  - Creazione account con ruolo specificato
+- Validazione dati utente
+- Hash password con bcrypt
+- Creazione account con ruolo specificato
 
 2. **Login**: `POST /api/auth/login`
-  - Verifica credenziali
-  - Generazione JWT token
-  - Invio token + refresh token
+- Verifica credenziali
+- Generazione JWT token
+- Invio token + refresh token
 
 3. **Autorizzazione**: Ogni richiesta protetta richiede:
    ```
@@ -193,62 +193,57 @@ Il sistema supporta tre ruoli principali:
 
 ## API Endpoints
 
-### Autenticazione (`/api/auth`)
+### Autenticazione
+| Metodo | Endpoint | Descrizione | Accesso  |
+|--------|----------|-------------|----------|
+| `POST` | `/api/auth/register` | Registrazione nuovo utente | Pubblico |
+| `POST` | `/api/auth/login` | Login con credenziali | Pubblico |
+| `POST` | `/api/auth/verify-token` | Verifica Token | Pubblico |
 
-| Metodo | Endpoint | Descrizione | Payload Richiesto | Risposta |
-|--------|----------|-------------|------------------|----------|
-| `POST` | `/register` | Registrazione nuovo utente | `{email, password, full_name, role, shop_name?}` | `{token, user, refreshToken}` |
-| `POST` | `/login` | Login con credenziali | `{email, password}` | `{token, user, refreshToken}` |
-| `POST` | `/refresh` | Rinnovo token JWT | `{refreshToken}` | `{token, refreshToken}` |
-| `POST` | `/logout` | Logout (invalidazione token) | - | `{message}` |
+### Utenti
+| Metodo | Endpoint | Descrizione | Accesso |
+|--------|----------|-------------|---------|
+| `GET` | `/api/users` | Lista di tutti gli utenti | Admin |
+| `GET` | `/api/users/:id` | Dettagli di un utente specifico | Admin o utente stesso |
+| `PUT` | `/api/users/:id` | Aggiorna profilo utente | Admin o utente stesso |
+| `PUT` | `/api/users/:id/changepassword` | Aggiorna la password utente | Admin |
+| `PUT` | `/api/users/:id/adminupdate` | Modifica utente (inclusi campi protetti) | Admin |
+| `DELETE` | `/api/users/:id` | Elimina utente | Admin |
 
-### Utenti (`/api/users`)
 
-| Metodo | Endpoint | Descrizione | Accesso | Parametri/Filtri |
-|--------|----------|-------------|---------|------------------|
-| `GET` | `/` | Lista utenti | Admin | `?page=1&limit=10&role=cliente&search=nome` |
-| `GET` | `/:id` | Dettagli utente | Admin, Utente stesso | - |
-| `PUT` | `/:id` | Aggiorna profilo | Admin, Utente stesso | `{full_name, phone_number, address, shop_name?, shop_description?}` |
-| `PATCH` | `/:id/status` | Attiva/disattiva utente | Admin | `{is_active: boolean}` |
-| `DELETE` | `/:id` | Elimina utente (soft delete) | Admin | - |
+### Categorie
+| Metodo | Endpoint | Descrizione | Accesso |
+|--------|----------|-------------|---------|
+| `GET` | `/api/categories` | Lista categorie | Pubblico |
+| `GET` | `/api/categories/:id` | Dettagli categoria | Pubblico |
+| `POST` | `/api/categories` | Crea nuova categoria | Admin e Artigiani |
+| `PUT` | `/api/categories/:id` | Aggiorna categoria | Admin e Artigiani |
+| `DELETE` | `/api/categories/:id` | Disattiva categoria | Admin |
 
-### Categorie (`/api/categories`)
+### Prodotti
+| Metodo | Endpoint | Descrizione | Accesso |
+|--------|----------|-------------|---------|
+| `GET` | `/api/products` | Lista prodotti attivi con filtri | Pubblico |
+| `GET` | `/api/products/:id` | Dettagli singolo prodotto | Pubblico |
+| `POST` | `/api/products` | Crea nuovo prodotto | Artigiano |
+| `PUT` | `/api/products/:id` | Aggiorna prodotto | Admin o Artigiano proprietario |
+| `DELETE` | `/api/products/:id` | Disattiva prodotto | Admin o Artigiano proprietario |
 
-| Metodo | Endpoint | Descrizione | Accesso | Note |
-|--------|----------|-------------|---------|------|
-| `GET` | `/` | Lista categorie attive | Pubblico | Supporta struttura gerarchica |
-| `GET` | `/:id` | Dettagli categoria | Pubblico | Include prodotti associati |
-| `GET` | `/:id/products` | Prodotti per categoria | Pubblico | `?page=1&limit=12&sort=price_asc` |
-| `POST` | `/` | Crea categoria | Admin, Artigiano | `{name, description, parent_category_id?}` |
-| `PUT` | `/:id` | Aggiorna categoria | Admin, Artigiano | `{name, description, parent_category_id?}` |
-| `DELETE` | `/:id` | Disattiva categoria | Admin | Soft delete |
+### Ordini
+| Metodo | Endpoint | Descrizione | Accesso |
+|--------|----------|-------------|---------|
+| `GET` | `/api/orders` | Lista ordini | Cliente (propri), Admin (tutti), Artigiano (propri) |
+| `GET` | `/api/orders/:id` | Dettagli ordine | Cliente (propri), Admin (tutti), Artigiano (coinvolto) |
+| `POST` | `/api/orders` | Crea nuovo ordine | Cliente |
+| `PUT` | `/api/orders/:id/status` | Aggiorna stato ordine | Cliente (solo cancel), Artigiani (in modo limitato), Admin (tutti gli stati) |
 
-### Prodotti (`/api/products`)
-
-| Metodo | Endpoint | Descrizione | Accesso | Parametri Query |
-|--------|----------|-------------|---------|-----------------|
-| `GET` | `/` | Lista prodotti attivi | Pubblico | `?category=1&min_price=10&max_price=100&search=ceramica&page=1&limit=12&sort=price_asc` |
-| `GET` | `/:id` | Dettagli prodotto | Pubblico | Include informazioni artigiano |
-| `GET` | `/artisan/:artisan_id` | Prodotti di un artigiano | Pubblico | `?page=1&limit=12` |
-| `POST` | `/` | Crea prodotto | Artigiano | `{name, description, price, category_id, stock_quantity, image_url?, sku?}` |
-| `PUT` | `/:id` | Aggiorna prodotto | Admin, Artigiano proprietario | Stessi campi del POST |
-| `PATCH` | `/:id/stock` | Aggiorna stock | Admin, Artigiano proprietario | `{stock_quantity}` |
-| `PATCH` | `/:id/status` | Attiva/disattiva | Admin, Artigiano proprietario | `{is_active: boolean}` |
-| `DELETE` | `/:id` | Elimina prodotto | Admin, Artigiano proprietario | Soft delete |
-
-### Ordini (`/api/orders`)
-
-| Metodo | Endpoint | Descrizione | Accesso | Note |
-|--------|----------|-------------|---------|------|
-| `GET` | `/` | Lista ordini | Cliente (propri), Admin (tutti), Artigiano (coinvolto) | `?status=pending&page=1&limit=10` |
-| `GET` | `/:id` | Dettagli ordine | Cliente (proprio), Admin, Artigiano (coinvolto) | Include items e info pagamento |
-| `GET` | `/customer/:customer_id` | Ordini cliente | Admin, Cliente stesso | Storico completo |
-| `GET` | `/artisan/:artisan_id` | Ordini per artigiano | Admin, Artigiano stesso | Ordini ricevuti |
-| `POST` | `/` | Crea ordine | Cliente | `{items: [{product_id, quantity}], shipping_address, billing_address?, notes?}` |
-| `PATCH` | `/:id/status` | Aggiorna stato | Admin, Cliente (solo cancel) | `{status, tracking_number?, notes?}` |
-| `DELETE` | `/:id` | Cancella ordine | Admin, Cliente (solo pending) | Solo ordini non pagati |
-
-**Stati ordine supportati**: `pending`, `paid`, `processing`, `shipped`, `delivered`, `cancelled`, `refunded`
+### Pagamenti
+| Metodo | Endpoint | Descrizione | Accesso |
+|--------|----------|-------------|---------|
+| `GET` | `/api/payments` | Lista pagamenti con filtri | Admin |
+| `GET` | `/api/payments/:id` | Dettagli singolo pagamento | Admin |
+| `GET` | `/api/payments/order/:order_id` | Pagamento di un ordine specifico | Admin o Cliente proprietario |
+| `POST` | `/api/payments` | Registra pagamento per ordine | Admin |
 
 ### Pagamenti (`/api/payments`)
 
@@ -259,9 +254,6 @@ Il sistema supporta tre ruoli principali:
 | `GET` | `/order/:order_id` | Pagamento per ordine | Admin, Cliente proprietario | - |
 | `POST` | `/` | Registra pagamento | Admin, Sistema | `{order_id, amount, payment_method, transaction_id?, status}` |
 | `PATCH` | `/:id/status` | Aggiorna stato pagamento | Admin | `{status, transaction_id?}` |
-
-**Metodi pagamento**: `credit_card`, `paypal`, `bank_transfer`, `other`
-**Stati pagamento**: `pending`, `completed`, `failed`, `refunded`
 
 ## Gestione Errori
 
@@ -281,9 +273,9 @@ Il sistema implementa una gestione centralizzata degli errori con:
 ### Formato Risposta Errore
 ```json
 {
-  "success": false,
-  "message": "Errore durante l'operazione",
-  "error": "Descrizione specifica dell'errore"
+   "success": false,
+   "message": "Errore durante l'operazione",
+   "error": "Descrizione specifica dell'errore"
 }
 ```
 
@@ -478,9 +470,9 @@ http://<IP_DELLA_VPS>:81
 4. Spunta **"Block Common Exploits"** e **"Websockets support"**
 5. Nella scheda SSL:
 
-  * Spunta **"Enable SSL"**
-  * Seleziona **"Request a new SSL Certificate"**
-  * Spunta **"Force SSL"**
+* Spunta **"Enable SSL"**
+* Seleziona **"Request a new SSL Certificate"**
+* Spunta **"Force SSL"**
 
 Ripeti la procedura per il frontend (porta 80, container `frontend_nginx`, o come configurato).
 
