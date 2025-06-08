@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Artigianato Online - Esame pratico di Tecnologie Innovative per lo Sviluppo Web di G.C. e R.C.">
+    <meta name="description"
+          content="Artigianato Online - Esame pratico di Tecnologie Innovative per lo Sviluppo Web di G.C. e R.C.">
 
     <title>Stato API - Artigianato Online</title>
 
@@ -84,6 +85,7 @@
         let tempiRisposta = [];
         let contaSuccessi = 0;
         let contaErrori = 0;
+
         const endpointDaTestare = {
             'autenticazione': [
                 {metodo: 'POST', endpoint: '/api/auth/register', nome: 'Registrazione', pubblico: true},
@@ -218,6 +220,9 @@
             });
         }
 
+        /**
+         * Aggiorna lo stato dell'endpoint testato
+         * */
         function aggiornaEndpointUI(categoria, endpoint, stato, tempoRisposta) {
             let badgeClass = 'bg-danger';
             let icona = 'x-circle';
@@ -271,6 +276,9 @@
             $(`#stato-${categoria}`).append(html);
         }
 
+        /**
+         * Aggiorna le statistiche
+         * */
         function aggiornaStatistiche() {
             const tuttiEndpoint = Object.values(endpointDaTestare).flat();
             const endpointAttivi = contaSuccessi;
@@ -290,17 +298,26 @@
             $('#percentuale-uptime').text(percentualeUptime + '%');
         }
 
+        /**
+         * Aggiorna oa
+         * */
         function aggiornaUltimoAggiornamento() {
             const ora = new Date().toLocaleTimeString('it-IT');
             $('#ultimo-aggiornamento').text(ora);
         }
 
+        /**
+         * Aggiornamento automatico
+         * */
         function avviaAggiornamentoAutomatico() {
             intervalloAggiornamento = setInterval(() => {
                 verificaStatoApi();
             }, 30000);
         }
 
+        /**
+         * Ripulisce la UI
+         */
         function pulisciRisultati() {
             contaSuccessi = 0;
             contaErrori = 0;
