@@ -34,6 +34,8 @@
         let modaleProdotto = null;
         let modaleInfoSpedizione = null;
         let modaleCategoria = null;
+        let modaleUtente = null;
+
         $(document).ready(function () {
             if (!tokenSessione || !datiUtenteString) {
                 logout();
@@ -73,6 +75,14 @@
             } else {
                 console.error("Elemento modale #categoryModal non trovato!");
             }
+
+            const elementoModaleUtente = document.getElementById('userModal');
+            if (elementoModaleUtente) {
+                modaleUtente = new bootstrap.Modal(elementoModaleUtente);
+            } else {
+                console.error("Elemento modale #userModal non trovato!");
+            }
+
             caricaCategorie()
                 .then(() => {
                     caricaSommariCard();
@@ -82,6 +92,10 @@
                     if (datiUtente.role === 'admin' || datiUtente.role === 'artigiano') {
                         $('#addCategoryBtn').show();
                         $('#categories-tab-item').show();
+                    }
+                    
+                    if (datiUtente.role === 'admin') {
+                        $('#users-tab-item').show();
                     }
                 })
                 .catch(errore => {
@@ -118,6 +132,16 @@
                 cancellaCategoria(idCategoria);
             });
 
+            $('#users-table').on('click', '.edit-user-btn', function () {
+                const idUtente = $(this).data('user-id');
+                apriModaleUtente(idUtente);
+            });
+
+            $('#users-table').on('click', '.delete-user-btn', function () {
+                const idUtente = $(this).data('user-id');
+                cancellaUtente(idUtente);
+            });
+
             $('#productForm').on('submit', function (e) {
                 e.preventDefault();
                 salvaProdotto();
@@ -127,6 +151,12 @@
                 e.preventDefault();
                 salvaCategoria();
             });
+
+            $('#userForm').on('submit', function (e) {
+                e.preventDefault();
+                salvaUtente();
+            });
+
             $(elementoModaleProdotto).on('hidden.bs.modal', function () {
                 $('#productForm')[0].reset();
                 $('#product-modal-feedback').empty().removeClass('alert-danger alert-success');
@@ -143,6 +173,16 @@
                 $('#categoryModalLabel').text('Aggiungi Nuova Categoria');
                 $('#saveCategoryBtn').text('Salva Categoria');
                 $('#saveCategoryBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+            });
+
+            $(elementoModaleUtente).on('hidden.bs.modal', function () {
+                $('#userForm')[0].reset();
+                $('#user-modal-feedback').empty().removeClass('alert-danger alert-success');
+                $('#userId').val('');
+                $('#userModalLabel').text('Modifica Utente');
+                $('#saveUserBtn').text('Salva Modifiche');
+                $('#saveUserBtn').prop('disabled', false).find('.spinner-border').addClass('d-none');
+                $('#artisan-fields').addClass('d-none');
             });
 
             $('#all-orders-table').on('click', '.update-status-btn', async function () {
@@ -261,6 +301,19 @@
 
             $('#categories-management-tab').on('shown.bs.tab', function (e) {
                 caricaCategorieTutte();
+            });
+
+            $('#users-management-tab').on('shown.bs.tab', function (e) {
+                caricaUtenti();
+            });
+
+            $('#userRole').on('change', function () {
+                const ruolo = $(this).val();
+                if (ruolo === 'artigiano') {
+                    $('#artisan-fields').removeClass('d-none');
+                } else {
+                    $('#artisan-fields').addClass('d-none');
+                }
             });
         });
 
@@ -692,6 +745,203 @@
         }
 
         /**
+         * Carica tutti gli utenti nella tabella di gestione
+         */
+        async function caricaUtenti() {
+            const corpoTabella = $('#users-table');
+            corpoTabella.empty().html('<tr><td colspan="6" class="text-center text-muted">Caricamento utenti...</td></tr>');
+            $('#users-feedback').empty();
+
+            try {
+                const dati = await fetchAutenticato(`${urlBaseApi}/api/users`);
+                const utenti = dati || [];
+                corpoTabella.empty();
+
+                if (utenti.length > 0) {
+                    utenti.forEach(utente => {
+                        const azioniHtml = `
+                            <button class="btn btn-sm btn-outline-dark edit-user-btn" title="Modifica" data-user-id="${utente.user_id}">
+                               <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-user-btn" title="Elimina" data-user-id="${utente.user_id}">
+                               <i class="bi bi-trash"></i>
+                            </button>
+                        `;
+                        
+                        const dataRegistrazione = utente.created_at ? new Date(utente.created_at).toLocaleDateString() : 'N/D';
+                        const ruoloTradotto = traduciRuolo(utente.role);
+                        
+                        corpoTabella.append(`
+                            <tr>
+                                <td>${utente.user_id}</td>
+                                <td>${utente.full_name || 'N/D'}</td>
+                                <td>${utente.email}</td>
+                                <td><span class="badge bg-${getRuoloBadge(utente.role)}">${ruoloTradotto}</span></td>
+                                <td>${dataRegistrazione}</td>
+                                <td>${azioniHtml}</td>
+                            </tr>
+                        `);
+                    });
+                } else {
+                    corpoTabella.append('<tr><td colspan="6" class="text-center text-muted">Nessun utente trovato.</td></tr>');
+                }
+            } catch (errore) {
+                console.error("Errore caricamento utenti:", errore);
+                corpoTabella.html(`<tr><td colspan="6" class="text-center text-danger">Errore nel caricamento degli utenti: ${errore.message}</td></tr>`);
+            }
+        }
+
+        /**
+         * Apre il modale per modificare un utente
+         */
+        async function apriModaleUtente(idUtente) {
+            $('#userForm')[0].reset();
+            $('#user-modal-feedback').empty().removeClass('alert-danger alert-success');
+            $('#userId').val(idUtente);
+            $('#artisan-fields').addClass('d-none');
+
+            try {
+                const utente = await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}`);
+                $('#userFullName').val(utente.full_name || '');
+                $('#userEmail').val(utente.email || '');
+                $('#userRole').val(utente.role || '');
+                
+                if (utente.role === 'artigiano') {
+                    $('#artisan-fields').removeClass('d-none');
+                    $('#userShopName').val(utente.shop_name || '');
+                    $('#userShopDescription').val(utente.shop_description || '');
+                }
+                
+            } catch (errore) {
+                console.error("Errore nel caricare i dati dell'utente per la modifica:", errore);
+                mostraAlertModaleUtente(`Impossibile caricare i dati dell'utente. ${errore.message}`, 'danger');
+                return;
+            }
+
+            if (modaleUtente) {
+                modaleUtente.show();
+            } else {
+                console.error("Istanza della modale utente non disponibile.");
+            }
+        }
+
+        /**
+         * Salva le modifiche di un utente
+         */
+        async function salvaUtente() {
+            const pulsanteSalva = $('#saveUserBtn');
+            const spinner = pulsanteSalva.find('.spinner-border');
+            const containerFeedback = $('#user-modal-feedback');
+            containerFeedback.empty().removeClass('alert-danger alert-success');
+            pulsanteSalva.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            const idUtente = $('#userId').val();
+            const datiUtente = {
+                full_name: $('#userFullName').val().trim(),
+                email: $('#userEmail').val().trim(),
+                role: $('#userRole').val()
+            };
+
+            if (datiUtente.role === 'artigiano') {
+                datiUtente.shop_name = $('#userShopName').val().trim();
+                datiUtente.shop_description = $('#userShopDescription').val().trim();
+            }
+
+            if (!datiUtente.full_name || !datiUtente.email || !datiUtente.role) {
+                mostraAlertModaleUtente('Per favore, compila tutti i campi obbligatori.', 'danger');
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}/adminupdate`, {
+                    method: 'PUT', 
+                    body: datiUtente
+                });
+                mostraAlertModaleUtente('Utente modificato con successo!', 'success');
+
+                caricaUtenti();
+                setTimeout(() => {
+                    if (modaleUtente) modaleUtente.hide();
+                }, 1500);
+
+            } catch (errore) {
+                console.error(`Errore durante il salvataggio dell'utente (PUT ${urlBaseApi}/api/users/${idUtente}/adminupdate):`, errore);
+                mostraAlertModaleUtente(`Errore: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            } finally {
+                pulsanteSalva.prop('disabled', false);
+                spinner.addClass('d-none');
+            }
+        }
+
+        /**
+         * Elimina un utente
+         */
+        async function cancellaUtente(idUtente) {
+            if (!confirm(`Sei sicuro di voler eliminare l'utente ID ${idUtente}? L'operazione è irreversibile.`)) {
+                return;
+            }
+
+            try {
+                await fetchAutenticato(`${urlBaseApi}/api/users/${idUtente}`, {method: 'DELETE'});
+                caricaUtenti();
+                mostraAlertUtenti(`Utente ID ${idUtente} eliminato con successo.`, 'success');
+            } catch (errore) {
+                console.error(`Errore durante l'eliminazione dell'utente ID ${idUtente}:`, errore);
+                mostraAlertUtenti(`Errore durante l'eliminazione: ${errore.message || 'Si è verificato un problema.'}`, 'danger');
+            }
+        }
+
+        /**
+         * Mostra un alert all'interno del modale utente
+         */
+        function mostraAlertModaleUtente(messaggio, tipo = 'danger') {
+            const containerFeedback = $('#user-modal-feedback');
+            containerFeedback.removeClass('alert-danger alert-success').addClass(`alert alert-${tipo}`).html(messaggio);
+        }
+
+        /**
+         * Mostra un alert nella sezione utenti
+         */
+        function mostraAlertUtenti(messaggio, tipo = 'success') {
+            const containerFeedback = $('#users-feedback');
+            const htmlAlert = `<div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+                                ${messaggio}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                              </div>`;
+            containerFeedback.html(htmlAlert);
+        }
+
+        /**
+         * Traduce il ruolo dall'inglese all'italiano
+         */
+        function traduciRuolo(ruolo) {
+            const traduzioni = {
+                'cliente': 'Cliente',
+                'artigiano': 'Artigiano',
+                'admin': 'Amministratore'
+            };
+            return traduzioni[ruolo?.toLowerCase()] || ruolo;
+        }
+
+        /**
+         * Restituisce la classe CSS del badge per il ruolo
+         */
+        function getRuoloBadge(ruolo) {
+            switch (ruolo?.toLowerCase()) {
+                case 'admin':
+                    return 'danger';
+                case 'artigiano':
+                    return 'warning';
+                case 'cliente':
+                    return 'primary';
+                default:
+                    return 'secondary';
+            }
+        }
+        /**
          * Restituisce la classe CSS del badge per lo stato ordine
          */        function getStatoOrdineBadge(stato) {
             switch (stato?.toLowerCase()) {
@@ -993,13 +1243,20 @@
                     type="button" role="tab" aria-controls="orders-management-tab-pane" aria-selected="false">Gestione
                 Ordini
             </button>
-        </li>
-        <li class="nav-item" role="presentation" id="categories-tab-item" style="display: none;">
+        </li>        <li class="nav-item" role="presentation" id="categories-tab-item" style="display: none;">
             <button class="nav-link text-dark" id="categories-management-tab" data-bs-toggle="tab"
                     data-bs-target="#categories-management-tab-pane"
                     type="button" role="tab" aria-controls="categories-management-tab-pane" aria-selected="false">
                 Gestione
                 Categorie
+            </button>
+        </li>
+        <li class="nav-item" role="presentation" id="users-tab-item" style="display: none;">
+            <button class="nav-link text-dark" id="users-management-tab" data-bs-toggle="tab"
+                    data-bs-target="#users-management-tab-pane"
+                    type="button" role="tab" aria-controls="users-management-tab-pane" aria-selected="false">
+                Gestione
+                Utenti
             </button>
         </li>
     </ul>
@@ -1134,9 +1391,7 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Gestione Categorie -->
+        </div>        <!-- Gestione Categorie -->
         <div class="tab-pane fade" id="categories-management-tab-pane" role="tabpanel"
              aria-labelledby="categories-management-tab" tabindex="0">
             <div class="card p-2 shadow-sm">
@@ -1158,6 +1413,39 @@
                             <tbody id="categories-table">
                             <tr>
                                 <td colspan="3" class="text-center text-muted">Caricamento categorie...</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestione Utenti -->
+        <div class="tab-pane fade" id="users-management-tab-pane" role="tabpanel"
+             aria-labelledby="users-management-tab" tabindex="0">
+            <div class="card p-2 shadow-sm">
+                <div class="card-header bg-white border-bottom-0">
+                    <h5 class="card-title mb-1 fw-bold">Gestione Utenti</h5>
+                    <p class="card-text text-muted small">Visualizza e gestisci tutti gli utenti registrati nel sistema.</p>
+                </div>
+                <div class="card-body">
+                    <div id="users-feedback" class="mb-3"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome Completo</th>
+                                <th>Email</th>
+                                <th>Ruolo</th>
+                                <th>Data Registrazione</th>
+                                <th>Azioni</th>
+                            </tr>
+                            </thead>
+                            <tbody id="users-table">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Caricamento utenti...</td>
                             </tr>
                             </tbody>
                         </table>
@@ -1327,6 +1615,68 @@
                                 <span class="spinner-border spinner-border-sm d-none me-1" role="status"
                                       aria-hidden="true"></span>
                                 Salva Categoria
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Modifica Utente -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="userForm">
+                <div class="modal-header bg-white border-bottom-0 pb-0">
+                    <h5 class="modal-title" id="userModalLabel">Modifica Utente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-0">
+                    <div id="user-modal-feedback" class="mb-3"></div>
+                    <input type="hidden" id="userId">
+
+                    <div class="mb-3">
+                        <label for="userFullName" class="form-label">Nome Completo <span
+                                class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="userFullName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userEmail" class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="userEmail" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="userRole" class="form-label">Ruolo <span class="text-danger">*</span></label>
+                        <select class="form-select" id="userRole" required>
+                            <option value="">Seleziona ruolo...</option>
+                            <option value="cliente">Cliente</option>
+                            <option value="artigiano">Artigiano</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div id="artisan-fields" class="d-none">
+                        <div class="mb-3">
+                            <label for="userShopName" class="form-label">Nome Negozio</label>
+                            <input type="text" class="form-control" id="userShopName">
+                        </div>
+                        <div class="mb-3">
+                            <label for="userShopDescription" class="form-label">Descrizione Negozio</label>
+                            <textarea class="form-control" id="userShopDescription" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top-0 pt-0">
+                    <div class="row gx-1 w-100">
+                        <div class="col-6">
+                            <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Annulla
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="submit" class="btn btn-dark w-100" id="saveUserBtn">
+                                <span class="spinner-border spinner-border-sm d-none me-1" role="status"
+                                      aria-hidden="true"></span>
+                                Salva Modifiche
                             </button>
                         </div>
                     </div>
