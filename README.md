@@ -3,7 +3,7 @@ Esame pratico del corso di tecnologie innovative per lo sviluppo Web.
 
 ## Team:
 - 756564 - Caretti Gabriele
-- ------ - Como Riccardo
+- 758697 - Como Riccardo
 
 ### Strumenti:
 - Docker e Docker Compose
