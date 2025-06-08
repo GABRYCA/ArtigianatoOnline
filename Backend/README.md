@@ -388,10 +388,6 @@ networks:
     driver: bridge
 ```
 
-Grazie per aver condiviso il tuo `docker-compose.yml`. Basandoci su questo file, posso aiutarti ad aggiornare la sezione del `README.md` con istruzioni dettagliate per il **deployment su una VPS Ubuntu ARM64**, incluso l'utilizzo di **Nginx Proxy Manager per HTTPS automatico**.
-
-Ecco una versione aggiornata della sezione `README.md` che tiene conto del tuo `docker-compose`:
-
 ---
 
 ### Deployment su Azure (o qualsiasi VPS Linux)
